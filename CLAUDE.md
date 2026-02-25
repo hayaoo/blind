@@ -8,14 +8,28 @@ macOSメニューバーに常駐するマインドフルネスリマインダー
 
 ## ビジネスモデル
 
-| 版 | 形態 | 価格 |
-|----|------|------|
-| 無料版 | OSS（GitHub公開） | 無料 |
-| 有料版 | Mac App Store 買い切り | 未定 |
+| 版 | 形態 | 配布 | 価格 |
+|----|------|------|------|
+| 無料版 | OSS | GitHub Releases | 無料 |
+| 有料版（Pro） | 同一バイナリ、キーでアンロック | GitHub Releases | 買い切り（未定） |
 
 **方針**:
-- 無料版はOSSとしてGitHubで公開、コミュニティ貢献を歓迎
-- 有料版は追加機能やサポートを含む買い切りアプリとして販売
+- Mac App Storeではなく**GitHub直接配布**
+- 署名・公証（notarize）でGatekeeperを通過
+- 有料版は購入者にライセンスキー（ダウンロードコード）を渡す
+- ベンチマーク: Cleanshot
+
+**ライセンス販売候補**: Gumroad / Paddle / LemonSqueezy
+
+## 配布戦略（ADR-0001）
+
+詳細: `docs/adr/0001-distribution-strategy.md`
+
+```
+GitHub Releases（署名・公証済みDMG）
+    + Sparkle自動更新
+    + ライセンスキーで有料機能アンロック
+```
 
 ## 技術スタック
 
@@ -24,30 +38,70 @@ macOSメニューバーに常駐するマインドフルネスリマインダー
 - Vision framework（目検知）
 - AVFoundation（カメラ制御）
 - macOS 14.0+ (Sonoma)
+- Sparkle（自動アップデート）
 
-## ディレクトリ構造
+## ディレクトリ構造（新アーキテクチャ）
 
 ```
-Blind/
-├── BlindApp.swift           # エントリーポイント
-├── AppDelegate.swift        # メニューバー・セッション管理
-├── Views/
-│   ├── SessionView.swift    # セッション画面
-│   └── SettingsView.swift   # 設定画面
-├── ViewModels/
-│   └── SessionViewModel.swift
-├── Services/
-│   ├── CameraService.swift      # カメラ制御
-│   ├── EyeDetectionService.swift # 目検知（Vision）
-│   ├── NotificationService.swift # 通知
-│   ├── TimerService.swift        # タイマー
-│   └── SoundService.swift        # サウンド
-├── Models/
-│   └── BlindSettings.swift
-├── Resources/
-│   └── Sounds/
-└── Info.plist
+blind/
+├── Packages/
+│   └── BlindCore/           # SwiftPM: ロジック・ドメイン
+│       ├── Sources/
+│       │   └── BlindCore/
+│       │       ├── Services/
+│       │       └── Models/
+│       └── Tests/
+│           └── BlindCoreTests/
+├── App/
+│   └── Blind/               # SwiftUI/AppKit シェル（薄く）
+│       ├── BlindApp.swift
+│       ├── AppDelegate.swift
+│       ├── Views/
+│       ├── Resources/
+│       └── Info.plist
+├── Tests/
+│   ├── UnitTests/
+│   └── IntegrationTests/
+├── UITests/
+│   └── BlindUITests/        # スモークテスト
+├── scripts/
+│   ├── build.sh
+│   ├── test.sh
+│   ├── notarize.sh
+│   └── release.sh
+├── .github/
+│   └── workflows/
+│       ├── ci.yml           # push/PR: ビルド・テスト
+│       └── release.yml      # タグ: 署名・公証・リリース
+├── docs/
+│   └── adr/
+├── Package.swift
+├── CLAUDE.md
+└── README.md
 ```
+
+**設計意図**:
+- `Packages/BlindCore`: ロジックをSwiftPMで分離 → テストしやすい、AIが扱いやすい
+- `App/Blind`: UIシェルは薄く
+- `scripts/`: ビルド・署名・公証・リリースを自動化
+- `.github/workflows/`: CI/CDでAI自己検証ループを回す
+
+## CI/CD（AI開発フレンドリー）
+
+### push/PRごと（ci.yml）
+1. Build
+2. Unit Test（Packages/BlindCore）
+3. Integration Test
+4. UI Smoke Test（起動・主要導線）
+5. **失敗時: スクショ・ログをartifact化 → AIがフィードバック**
+
+### releaseタグ（release.yml）
+1. Build (Release)
+2. codesign（Developer ID）
+3. notarize + staple
+4. DMG作成
+5. GitHub Release（DMG + SHA256）
+6. Sparkle appcast更新
 
 ## 主要な機能フロー
 
@@ -64,20 +118,39 @@ Blind/
 - カメラ使用許可が必要（NSCameraUsageDescription）
 - 映像は保存・送信しない（プライバシー配慮）
 - Eye Aspect Ratio の閾値（0.2）は要調整
+- **署名・公証は必須**（未署名だとGatekeeperで止まる）
 
 ## ビルド・実行
 
 ```bash
-# Xcodeで開く
-open Blind.xcodeproj
+# SwiftPMでビルド
+swift build
 
-# コマンドラインビルド
-xcodebuild -project Blind.xcodeproj -scheme Blind build
+# テスト
+swift test
+
+# Xcodeで開く（App）
+open App/Blind/Blind.xcodeproj
+
+# リリースビルド（スクリプト）
+./scripts/build.sh
+./scripts/notarize.sh
+./scripts/release.sh
 ```
 
 ## 関連ドキュメント
 
-- 要件書: `/Users/m/src/github.com/hayaoo/pomm/03_projects/blind/requirements.md`
-- コンセプト: `/Users/m/src/github.com/hayaoo/pomm/03_projects/blind/concept.md`
-- 競合調査: `/Users/m/src/github.com/hayaoo/pomm/03_projects/blind/competitors.md`
-- MVP定義: `/Users/m/src/github.com/hayaoo/pomm/03_projects/blind/mvp.md`
+### リポジトリ内
+- ADR: `docs/adr/`
+
+### pomm（経営管理リポジトリ）
+- 要件書: `03_projects/blind/requirements.md`
+- コンセプト: `03_projects/blind/concept.md`
+- 競合調査: `03_projects/blind/competitors.md`
+- MVP定義: `03_projects/blind/mvp.md`
+
+## Open Questions
+
+- [ ] Storeでも販売すべきか？（一般ユーザーリーチ vs 手数料・制約）
+- [ ] ライセンス販売プラットフォームの選定
+- [ ] 有料版の追加機能の詳細

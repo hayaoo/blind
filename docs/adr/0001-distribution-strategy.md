@@ -1,0 +1,157 @@
+# ADR-0001: 配布戦略とアーキテクチャ
+
+- **Status**: Accepted
+- **Date**: 2026-02-25
+- **Deciders**: @hayaoo
+
+## Context
+
+Blindの配布方法とアーキテクチャを決定する必要がある。
+
+### 要件
+- 無料版（OSS）と有料版（買い切り）の2層構造
+- Mac App Storeではなく、GitHub直接配布
+- 有料版は購入者にダウンロードコードを渡す形式
+- AI（Claude）が開発しやすい環境
+- ベンチマーク: Cleanshot（直接配布の成功事例）
+
+### 検討した選択肢
+
+| 選択肢 | メリット | デメリット |
+|--------|----------|------------|
+| A) GitHub Releases + 署名・公証 | CI自動化しやすい、AI検証向き | 署名にDeveloper ID必要（$99/年） |
+| B) Homebrew cask | 開発者向けに導入が軽い | 一般ユーザーには敷居高い |
+| C) Mac App Store | 一般ユーザーに信頼感 | サンドボックス制約、審査、手数料30% |
+
+## Decision
+
+**選択肢A: GitHub Releases（署名・公証済みDMG）+ Sparkle自動更新**を採用する。
+
+### 理由
+
+1. **AI開発との相性**
+   - CIで「ビルド→テスト→署名→公証→リリース」まで自動化
+   - 失敗時のログ・スクショをartifact化し、AIが自己修正ループを回せる
+
+2. **Cleanshot方式との親和性**
+   - 直接配布でも署名・公証でGatekeeperを通過
+   - Sparkleで自動アップデート
+
+3. **有料版の柔軟性**
+   - ダウンロードコード（ライセンスキー）で有料機能をアンロック
+   - App Storeの手数料なし
+
+## Architecture
+
+### リポジトリ構造（新）
+
+```
+blind/
+├── Packages/
+│   └── BlindCore/           # SwiftPM: ロジック・ドメイン
+│       ├── Sources/
+│       │   └── BlindCore/
+│       │       ├── Services/
+│       │       │   ├── CameraService.swift
+│       │       │   ├── EyeDetectionService.swift
+│       │       │   └── ...
+│       │       └── Models/
+│       └── Tests/
+│           └── BlindCoreTests/
+├── App/
+│   └── Blind/               # SwiftUI/AppKit シェル（薄く）
+│       ├── BlindApp.swift
+│       ├── AppDelegate.swift
+│       ├── Views/
+│       ├── Resources/
+│       └── Info.plist
+├── Tests/
+│   ├── UnitTests/
+│   └── IntegrationTests/
+├── UITests/
+│   └── BlindUITests/        # スモークテスト（起動・主要導線）
+├── scripts/
+│   ├── build.sh
+│   ├── test.sh
+│   ├── notarize.sh
+│   └── release.sh
+├── .github/
+│   └── workflows/
+│       ├── ci.yml           # push/PRごとのビルド・テスト
+│       └── release.yml      # タグでリリース
+├── docs/
+│   └── adr/
+├── CLAUDE.md
+├── README.md
+└── Package.swift            # ルートPackage（workspace的に使用）
+```
+
+### CI/CD設計
+
+#### push/PRごと（ci.yml）
+1. Build
+2. Unit Test
+3. Integration Test
+4. UI Smoke Test（起動・主要導線）
+5. 失敗時: スクショ・ログ・クラッシュレポートをartifact化
+
+#### releaseタグ（release.yml）
+1. Build (Release)
+2. codesign（Developer ID）
+3. notarize + staple
+4. DMG作成
+5. GitHub Release作成（DMG添付、SHA256ハッシュ）
+6. Sparkle appcast更新（任意）
+7. Homebrew cask更新（任意）
+
+### 有料版の実装方針
+
+```
+┌─────────────────────────────────────────────────────┐
+│  無料版（OSS）                                       │
+│  - 基本機能すべて                                    │
+│  - GitHub Releasesからダウンロード                   │
+└─────────────────────────────────────────────────────┘
+                      │
+                      │ ライセンスキー入力
+                      ▼
+┌─────────────────────────────────────────────────────┐
+│  有料版（Pro）                                       │
+│  - 追加機能（統計、サウンドカスタマイズ等）          │
+│  - 優先サポート                                      │
+│  - 同一バイナリ、キーでアンロック                    │
+└─────────────────────────────────────────────────────┘
+```
+
+- ライセンスキー検証: ローカル検証（RSA署名）or 軽量サーバー
+- 販売: Gumroad / Paddle / LemonSqueezy 等
+
+## Consequences
+
+### Positive
+- AI開発フレンドリー（CI artifact → AIフィードバックループ）
+- 配布の摩擦が少ない（署名・公証済み）
+- App Store手数料なし
+- OSSとしてコミュニティ貢献を受けられる
+
+### Negative
+- Developer ID登録必要（$99/年）
+- ライセンス検証の実装が必要
+- サポートは自前
+
+### Risks
+- 未署名だとGatekeeperで止まる → 署名・公証は必須
+- ライセンスキーのクラック → 許容（OSSなので本気で防ぐ意味が薄い）
+
+## References
+
+- Cleanshot: https://cleanshot.com/
+- Sparkle: https://sparkle-project.org/
+- Apple Developer Program: https://developer.apple.com/programs/
+- Notarization: https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution
+
+## Open Questions
+
+- [ ] Storeで販売すべきか？（一般ユーザー向けリーチ vs 手数料・制約）
+- [ ] ライセンス販売プラットフォームの選定（Gumroad / Paddle / LemonSqueezy）
+- [ ] 有料版の追加機能の詳細
