@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import BlindCore
 
 @MainActor
 class SessionViewModel: ObservableObject {
@@ -90,12 +91,5 @@ class SessionViewModel: ObservableObject {
     private func completeSession() {
         stopSession()
         onSessionComplete?()
-    }
-}
-
-// Helper extension
-private extension Int {
-    func nonZeroOr(_ defaultValue: Int) -> Int {
-        self > 0 ? self : defaultValue
     }
 }

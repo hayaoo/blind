@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.2.app
+
+      - name: Build BlindCore
+        run: |
+          cd Packages/BlindCore
+          swift build -c release
+
+      - name: Test BlindCore
+        run: |
+          cd Packages/BlindCore
+          swift test
+
+      # TODO: Build App, codesign, notarize, create DMG
+      # - name: Build App
+      #   run: ./scripts/build.sh
+      #
+      # - name: Notarize
+      #   run: ./scripts/notarize.sh
+      #   env:
+      #     APPLE_ID: ${{ secrets.APPLE_ID }}
+      #     APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      #     TEAM_ID: ${{ secrets.TEAM_ID }}
+      #
+      # - name: Create Release
+      #   uses: softprops/action-gh-release@v1
+      #   with:
+      #     files: |
+      #       Blind-*.dmg
+      #       SHA256SUMS.txt
+
+      - name: Create Release (placeholder)
+        uses: softprops/action-gh-release@v1
+        with:
+          body: |
+            ## Blind ${{ github.ref_name }}
+
+            ### Changes
+            - See commit history
+
+            ### Installation
+            1. Download the DMG
+            2. Open and drag Blind to Applications
+            3. Run Blind from Applications
+
+            ### Checksums
+            Coming soon...
+          draft: true

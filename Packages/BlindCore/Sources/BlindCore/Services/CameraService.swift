@@ -1,14 +1,14 @@
 import AVFoundation
 import Vision
 
-class CameraService: NSObject {
-    static let shared = CameraService()
+public class CameraService: NSObject {
+    public static let shared = CameraService()
 
     private var captureSession: AVCaptureSession?
     private var videoOutput: AVCaptureVideoDataOutput?
     private let sessionQueue = DispatchQueue(label: "com.blind.camera")
 
-    var onFrameCaptured: ((CVPixelBuffer) -> Void)?
+    public var onFrameCaptured: ((CVPixelBuffer) -> Void)?
 
     private override init() {
         super.init()
@@ -16,7 +16,7 @@ class CameraService: NSObject {
 
     // MARK: - Permission
 
-    func requestPermission(completion: @escaping (Bool) -> Void) {
+    public func requestPermission(completion: @escaping (Bool) -> Void) {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             completion(true)
@@ -33,14 +33,14 @@ class CameraService: NSObject {
 
     // MARK: - Session Control
 
-    func startCapture() {
+    public func startCapture() {
         sessionQueue.async { [weak self] in
             self?.setupCaptureSession()
             self?.captureSession?.startRunning()
         }
     }
 
-    func stopCapture() {
+    public func stopCapture() {
         sessionQueue.async { [weak self] in
             self?.captureSession?.stopRunning()
         }

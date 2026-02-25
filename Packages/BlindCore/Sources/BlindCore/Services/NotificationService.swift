@@ -1,7 +1,7 @@
 import UserNotifications
 
-class NotificationService: NSObject {
-    static let shared = NotificationService()
+public class NotificationService: NSObject {
+    public static let shared = NotificationService()
 
     private var onNotificationAction: (() -> Void)?
 
@@ -10,7 +10,7 @@ class NotificationService: NSObject {
         UNUserNotificationCenter.current().delegate = self
     }
 
-    func requestPermission() {
+    public func requestPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
             if let error = error {
                 print("Notification permission error: \(error)")
@@ -18,7 +18,7 @@ class NotificationService: NSObject {
         }
     }
 
-    func showReminder(onStart: @escaping () -> Void) {
+    public func showReminder(onStart: @escaping () -> Void) {
         onNotificationAction = onStart
 
         let content = UNMutableNotificationContent()
@@ -40,7 +40,7 @@ class NotificationService: NSObject {
         }
     }
 
-    func setupCategories() {
+    public func setupCategories() {
         let startAction = UNNotificationAction(
             identifier: "START",
             title: "開始",
@@ -65,7 +65,7 @@ class NotificationService: NSObject {
 }
 
 extension NotificationService: UNUserNotificationCenterDelegate {
-    func userNotificationCenter(
+    public func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
@@ -77,7 +77,7 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         completionHandler()
     }
 
-    func userNotificationCenter(
+    public func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void

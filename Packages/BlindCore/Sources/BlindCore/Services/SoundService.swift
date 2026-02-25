@@ -1,18 +1,18 @@
 import AVFoundation
 import AppKit
 
-class SoundService {
-    static let shared = SoundService()
+public class SoundService {
+    public static let shared = SoundService()
 
     private var audioPlayer: AVAudioPlayer?
 
     private init() {}
 
-    var soundEnabled: Bool {
+    public var soundEnabled: Bool {
         UserDefaults.standard.bool(forKey: "soundEnabled")
     }
 
-    func playCompletionSound() {
+    public func playCompletionSound() {
         guard soundEnabled else { return }
 
         // Try to play custom sound first

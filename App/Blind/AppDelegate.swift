@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import BlindCore
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!

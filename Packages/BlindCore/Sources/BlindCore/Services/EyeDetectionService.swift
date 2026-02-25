@@ -1,8 +1,8 @@
 import Vision
 import CoreImage
 
-class EyeDetectionService {
-    var onEyeStateChanged: ((Bool) -> Void)?
+public class EyeDetectionService {
+    public var onEyeStateChanged: ((Bool) -> Void)?
 
     private let cameraService = CameraService.shared
     private var isRunning = false
@@ -11,7 +11,9 @@ class EyeDetectionService {
     // Lower value = more closed
     private let earThreshold: Float = 0.2
 
-    func start() {
+    public init() {}
+
+    public func start() {
         guard !isRunning else { return }
         isRunning = true
 
@@ -21,7 +23,7 @@ class EyeDetectionService {
         cameraService.startCapture()
     }
 
-    func stop() {
+    public func stop() {
         isRunning = false
         cameraService.stopCapture()
         cameraService.onFrameCaptured = nil

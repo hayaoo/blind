@@ -1,25 +1,27 @@
 import Foundation
 
-class TimerService {
-    var onTimerFired: (() -> Void)?
+public class TimerService {
+    public var onTimerFired: (() -> Void)?
 
     private var timer: Timer?
 
-    var intervalMinutes: Int {
+    public var intervalMinutes: Int {
         let stored = UserDefaults.standard.integer(forKey: "reminderInterval")
         return stored > 0 ? stored : 30
     }
 
-    func start() {
+    public init() {}
+
+    public func start() {
         scheduleTimer()
     }
 
-    func stop() {
+    public func stop() {
         timer?.invalidate()
         timer = nil
     }
 
-    func reset() {
+    public func reset() {
         stop()
         start()
     }
