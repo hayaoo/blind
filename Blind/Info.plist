@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Blind</string>
+    <key>CFBundleDisplayName</key>
+    <string>Blind</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.hayaoo.blind</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSCameraUsageDescription</key>
+    <string>Blindは目の状態を検知するためにカメラを使用します。映像は保存されず、外部に送信されることもありません。</string>
+    <key>NSUserNotificationsUsageDescription</key>
+    <string>Blindはリマインダー通知を送信するために通知を使用します。</string>
+</dict>
+</plist>
