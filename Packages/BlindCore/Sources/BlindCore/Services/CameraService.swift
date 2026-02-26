@@ -41,7 +41,10 @@ public class CameraService: NSObject {
     }
 
     public func stopCapture() {
-        sessionQueue.async { [weak self] in
+        // sessionQueue.syncで同期的に停止し、全てのin-flightフレーム処理が
+        // 完了してからreturnすることを保証する。
+        sessionQueue.sync { [weak self] in
+            self?.onFrameCaptured = nil
             self?.captureSession?.stopRunning()
         }
     }
@@ -54,9 +57,9 @@ public class CameraService: NSObject {
         let session = AVCaptureSession()
         session.sessionPreset = .medium
 
-        // Get FaceTime camera
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) else {
-            print("No front camera available")
+        // Get default camera (FaceTime camera on Mac)
+        guard let device = AVCaptureDevice.default(for: .video) else {
+            print("No camera available")
             return
         }
 
@@ -87,8 +90,9 @@ public class CameraService: NSObject {
 // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
 
 extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
-    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        onFrameCaptured?(pixelBuffer)
+    public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard let callback = onFrameCaptured,
+              let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        callback(pixelBuffer)
     }
 }

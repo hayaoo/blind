@@ -8,6 +8,7 @@ public class NotificationService: NSObject {
     private override init() {
         super.init()
         UNUserNotificationCenter.current().delegate = self
+        setupCategories()
     }
 
     public func requestPermission() {

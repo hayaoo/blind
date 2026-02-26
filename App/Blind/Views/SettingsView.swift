@@ -1,4 +1,5 @@
 import SwiftUI
+import ServiceManagement
 
 struct SettingsView: View {
     @AppStorage("reminderInterval") private var reminderInterval = 30
@@ -46,11 +47,17 @@ struct SettingsView: View {
     }
 }
 
-// Helper for launch at login
 enum LaunchAtLogin {
     static func setEnabled(_ enabled: Bool) {
-        // TODO: Implement using SMAppService (macOS 13+)
-        // SMAppService.mainApp.register() / unregister()
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            print("Failed to update launch at login: \(error)")
+        }
     }
 }
 

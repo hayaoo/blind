@@ -19,17 +19,18 @@ public struct BlindSettings: Codable {
     }
 
     public static var current: BlindSettings {
-        BlindSettings(
-            reminderInterval: UserDefaults.standard.integer(forKey: "reminderInterval").nonZeroOr(30),
-            eyeCloseDuration: UserDefaults.standard.integer(forKey: "eyeCloseDuration").nonZeroOr(5),
-            soundEnabled: UserDefaults.standard.bool(forKey: "soundEnabled"),
-            launchAtLogin: UserDefaults.standard.bool(forKey: "launchAtLogin")
+        let defaults = UserDefaults.standard
+        return BlindSettings(
+            reminderInterval: defaults.integer(forKey: "reminderInterval").nonZeroOr(30),
+            eyeCloseDuration: defaults.integer(forKey: "eyeCloseDuration").nonZeroOr(5),
+            soundEnabled: defaults.object(forKey: "soundEnabled") == nil ? true : defaults.bool(forKey: "soundEnabled"),
+            launchAtLogin: defaults.bool(forKey: "launchAtLogin")
         )
     }
 }
 
 extension Int {
-    func nonZeroOr(_ defaultValue: Int) -> Int {
+    public func nonZeroOr(_ defaultValue: Int) -> Int {
         self > 0 ? self : defaultValue
     }
 }

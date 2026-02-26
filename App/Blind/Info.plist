@@ -18,6 +18,17 @@
     <string>14.0</string>
     <key>LSUIElement</key>
     <true/>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.hayaoo.blind</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>blind</string>
+            </array>
+        </dict>
+    </array>
     <key>NSCameraUsageDescription</key>
     <string>Blindは目の状態を検知するためにカメラを使用します。映像は保存されず、外部に送信されることもありません。</string>
     <key>NSUserNotificationsUsageDescription</key>

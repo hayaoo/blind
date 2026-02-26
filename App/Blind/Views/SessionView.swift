@@ -1,5 +1,7 @@
 import SwiftUI
 
+/// レガシーフォールバック: NotchSessionViewに問題がある場合に切り戻し可能。
+/// AppDelegateのstartSession()でNotchSessionView→SessionViewに差し替えるだけで復帰できる。
 struct SessionView: View {
     @ObservedObject var viewModel: SessionViewModel
 
@@ -7,10 +9,11 @@ struct SessionView: View {
         VStack(spacing: 12) {
             // Eye status indicator
             Circle()
-                .fill(viewModel.eyesClosed ? Color.red : Color.green)
+                .fill(indicatorColor)
                 .frame(width: 40, height: 40)
-                .shadow(color: viewModel.eyesClosed ? .red.opacity(0.5) : .green.opacity(0.5), radius: 10)
+                .shadow(color: indicatorColor.opacity(0.5), radius: 10)
                 .animation(.easeInOut(duration: 0.3), value: viewModel.eyesClosed)
+                .animation(.easeInOut(duration: 0.3), value: viewModel.faceDetected)
 
             // Status text
             Text(statusText)
@@ -29,18 +32,19 @@ struct SessionView: View {
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.black.opacity(0.8))
         )
-        .onAppear {
-            NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                if event.keyCode == 53 { // ESC key
-                    viewModel.cancelSession()
-                    return nil
-                }
-                return event
-            }
+    }
+
+    private var indicatorColor: Color {
+        if !viewModel.faceDetected {
+            return .yellow
         }
+        return viewModel.eyesClosed ? .red : .green
     }
 
     private var statusText: String {
+        if !viewModel.faceDetected {
+            return "カメラに顔を向けてください"
+        }
         if viewModel.eyesClosed {
             let remaining = viewModel.requiredClosedDuration - viewModel.closedDuration
             return "あと \(Int(remaining)) 秒..."

@@ -1,15 +1,25 @@
 import Vision
 import CoreImage
 
+public enum EyeState {
+    case open       // 顔検出済み、目が開いている
+    case closed     // 顔検出済み、目が閉じている
+    case noFace     // 顔が検出できない
+}
+
 public class EyeDetectionService {
-    public var onEyeStateChanged: ((Bool) -> Void)?
+    public var onEyeStateChanged: ((EyeState) -> Void)?
+    /// カメラフレームをCGImageとして受け取るコールバック（UIへの映像投影用）
+    public var onFrameImage: ((CGImage) -> Void)?
 
     private let cameraService = CameraService.shared
+    private let ciContext = CIContext()
     private var isRunning = false
+    private var frameSkipCounter = 0
 
     // Eye Aspect Ratio threshold for determining if eyes are closed
     // Lower value = more closed
-    private let earThreshold: Float = 0.2
+    public var earThreshold: Float = 0.2
 
     public init() {}
 
@@ -25,38 +35,55 @@ public class EyeDetectionService {
 
     public func stop() {
         isRunning = false
+        onEyeStateChanged = nil
+        onFrameImage = nil
         cameraService.stopCapture()
-        cameraService.onFrameCaptured = nil
     }
 
     private func processFrame(_ pixelBuffer: CVPixelBuffer) {
-        let request = VNDetectFaceLandmarksRequest { [weak self] request, error in
-            guard let self = self else { return }
+        guard isRunning else { return }
 
-            if let error = error {
-                print("Face detection error: \(error)")
-                self.notifyEyeState(closed: true) // Assume closed if detection fails
+        // カメラ映像をCGImageに変換（3フレームに1回、パフォーマンス節約）
+        // CIGaussianBlur + CIPixellate で人間と認識できないレベルにぼかす
+        frameSkipCounter += 1
+        if frameSkipCounter % 3 == 0, let callback = onFrameImage {
+            let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+            let blurred = ciImage
+                .applyingFilter("CIPixellate", parameters: [kCIInputScaleKey: 12])
+                .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 25])
+            // ブラーで広がった分をクロップ
+            let cropped = blurred.cropped(to: ciImage.extent)
+            if let cgImage = ciContext.createCGImage(cropped, from: ciImage.extent) {
+                DispatchQueue.main.async {
+                    callback(cgImage)
+                }
+            }
+        }
+
+        // Wrap in autoreleasepool to ensure all Vision framework ObjC objects
+        // are released immediately, preventing corrupt pointers from lingering
+        // in the RunLoop's autorelease pool (which caused EXC_BAD_ACCESS).
+        autoreleasepool {
+            let request = VNDetectFaceLandmarksRequest()
+            let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
+
+            do {
+                try handler.perform([request])
+            } catch {
+                print("Failed to perform face detection: \(error)")
+                notifyEyeState(.noFace)
                 return
             }
 
             guard let observations = request.results as? [VNFaceObservation],
                   let face = observations.first,
                   let landmarks = face.landmarks else {
-                // No face detected - treat as eyes closed
-                self.notifyEyeState(closed: true)
+                notifyEyeState(.noFace)
                 return
             }
 
-            let eyesClosed = self.areEyesClosed(landmarks: landmarks)
-            self.notifyEyeState(closed: eyesClosed)
-        }
-
-        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
-        do {
-            try handler.perform([request])
-        } catch {
-            print("Failed to perform face detection: \(error)")
-            notifyEyeState(closed: true)
+            let eyesClosed = areEyesClosed(landmarks: landmarks)
+            notifyEyeState(eyesClosed ? .closed : .open)
         }
     }
 
@@ -105,9 +132,9 @@ public class EyeDetectionService {
         return Float(sqrt(dx * dx + dy * dy))
     }
 
-    private func notifyEyeState(closed: Bool) {
+    private func notifyEyeState(_ state: EyeState) {
         DispatchQueue.main.async { [weak self] in
-            self?.onEyeStateChanged?(closed)
+            self?.onEyeStateChanged?(state)
         }
     }
 }

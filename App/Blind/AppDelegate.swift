@@ -2,16 +2,52 @@ import AppKit
 import SwiftUI
 import BlindCore
 
+/// シグナルハンドラからアクセスするためのグローバル参照
+private var _sharedAppDelegate: AppDelegate?
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
-    private var sessionWindow: NSWindow?
+    private var sessionWindow: NotchOverlayWindow?
+    private var settingsWindow: NSWindow?
     private var timerService: TimerService?
     private var sessionViewModel: SessionViewModel?
+    private var escMonitor: Any?
+    private var watchdog: WatchdogService?
+    private var sessionTimeoutTimer: Timer?
+
+    /// セッションタイムアウト（秒）
+    private let sessionMaxDuration: TimeInterval = 120
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return false
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        _sharedAppDelegate = self
+
+        UserDefaults.standard.register(defaults: [
+            "reminderInterval": 30,
+            "eyeCloseDuration": 5,
+            "soundEnabled": true,
+            "launchAtLogin": false
+        ])
+
+        // クラッシュリカバリ: 前回のセッションが未クリーン終了していれば音量復帰
+        if VolumeControlService.shared.hasSavedVolume {
+            VolumeControlService.shared.emergencyRestore()
+        }
+
+        setupSignalHandlers()
+        NotificationService.shared.requestPermission()
+
         setupStatusItem()
         setupTimer()
         requestCameraPermission()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // 層4: 終了時に音量復帰 + ウィンドウ非表示
+        emergencyCleanup()
     }
 
     // MARK: - Status Item (Menu Bar)
@@ -21,8 +57,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let button = statusItem.button {
             button.image = NSImage(systemSymbolName: "eye.slash", accessibilityDescription: "Blind")
-            button.action = #selector(statusItemClicked)
-            button.target = self
         }
 
         setupMenu()
@@ -50,69 +84,189 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
     }
 
-    @objc private func statusItemClicked() {
-        // Menu will be shown automatically
-    }
-
     // MARK: - Session
 
+    @MainActor
     @objc func startSession() {
         guard sessionWindow == nil else { return }
 
         let viewModel = SessionViewModel()
-        viewModel.onSessionComplete = { [weak self] in
-            self?.closeSession()
+        viewModel.onSessionComplete = { [weak self] completed in
+            self?.closeSession(completed: completed)
+        }
+        viewModel.onPhaseChanged = { [weak self] phase in
+            self?.handlePhaseChange(phase)
+        }
+        viewModel.onEyesClosedChanged = { [weak self] closed in
+            self?.handleEyesClosedChanged(closed)
         }
         sessionViewModel = viewModel
 
-        let sessionView = SessionView(viewModel: viewModel)
+        // NotchOverlayWindow: ノッチに融合するオーバーレイ
+        let window = NotchOverlayWindow()
+        window.configureGeometry()
 
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 200, height: 120),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-
+        let sessionView = NotchSessionView(viewModel: viewModel, hasNotch: window.hasNotch)
         window.contentView = NSHostingView(rootView: sessionView)
-        window.backgroundColor = .clear
-        window.isOpaque = false
-        window.level = .floating
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.applyRoundedCorners()
 
-        // Position below notch (center top of screen)
-        if let screen = NSScreen.main {
-            let screenFrame = screen.frame
-            let windowFrame = window.frame
-            let x = screenFrame.midX - windowFrame.width / 2
-            let y = screenFrame.maxY - windowFrame.height - 50 // Below notch area
-            window.setFrameOrigin(NSPoint(x: x, y: y))
-        }
-
+        // Phase 1: summonフレームで表示開始
+        window.applySummonFrame()
         window.makeKeyAndOrderFront(nil)
         sessionWindow = window
 
-        // Start camera detection
+        // ESC key monitor (managed here, not in SwiftUI view)
+        // .screenSaverレベルでも addLocalMonitorForEvents は動作する
+        escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.keyCode == 53 { // ESC
+                self?.closeSession(completed: false)
+                return nil
+            }
+            return event
+        }
+
+        // 層1: Watchdog — メインスレッドハング検知
+        let wd = WatchdogService()
+        wd.onMainThreadHung = { [weak self] in
+            // バックグラウンドスレッドから呼ばれる
+            VolumeControlService.shared.emergencyRestore()
+            DispatchQueue.main.async {
+                self?.sessionWindow?.orderOut(nil)
+                self?.closeSession(completed: false)
+            }
+        }
+        wd.start()
+        watchdog = wd
+
+        // 層2: セッションタイムアウト
+        sessionTimeoutTimer = Timer.scheduledTimer(withTimeInterval: sessionMaxDuration, repeats: false) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.closeSession(completed: false)
+            }
+        }
+
         viewModel.startSession()
     }
 
-    private func closeSession() {
-        sessionWindow?.close()
-        sessionWindow = nil
-        sessionViewModel?.stopSession()
+    // MARK: - Eyes Closed → Fullscreen
+
+    @MainActor
+    private func handleEyesClosedChanged(_ closed: Bool) {
+        guard let window = sessionWindow else { return }
+        if closed {
+            // 目を閉じた → フルスクリーン即座展開（opacity遷移で暗転）+ 音量フェードダウン
+            VolumeControlService.shared.saveCurrentVolume()
+            window.animateToFullscreen(duration: 0.05)
+            Task {
+                await VolumeControlService.shared.fadeDown(to: 0.02, duration: 2.0)
+            }
+        } else {
+            // 目を開いた → encounterサイズに戻す + 音量即時復帰
+            window.animateToEncounter(duration: 0.4)
+            VolumeControlService.shared.emergencyRestore()
+        }
+    }
+
+    // MARK: - Phase Change Handler
+
+    @MainActor
+    private func handlePhaseChange(_ phase: SessionPhase) {
+        guard let window = sessionWindow else { return }
+
+        switch phase {
+        case .summon:
+            // Summon → Encounter アニメーション
+            window.animateToEncounter(duration: 0.6) { [weak self] in
+                self?.sessionViewModel?.onSummonAnimationComplete()
+            }
+
+        case .immersion:
+            // encounter中に既にフルスクリーン拡大済み。音量も下げ済み。
+            break
+
+        case .awakening:
+            // 音量を即時復帰してから完了音を鳴らす
+            VolumeControlService.shared.emergencyRestore()
+            SoundService.shared.playCompletionSound()
+            window.animateToShrink(duration: 0.8)
+            // 覚醒アニメーション後に完了
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                self?.sessionViewModel?.onAwakeningAnimationComplete()
+            }
+
+        case .completed:
+            // ウィンドウを縮小して消す
+            window.animateToDisappear(duration: 0.4) { [weak self] in
+                self?.closeSession(completed: true)
+            }
+
+        case .cancelled:
+            // 即座に音量復帰
+            VolumeControlService.shared.emergencyRestore()
+
+        default:
+            break
+        }
+    }
+
+    @MainActor
+    private func closeSession(completed: Bool) {
+        // Guard against double-close
+        guard sessionWindow != nil || sessionViewModel != nil else { return }
+
+        // 1. Stop safety mechanisms
+        watchdog?.stop()
+        watchdog = nil
+        sessionTimeoutTimer?.invalidate()
+        sessionTimeoutTimer = nil
+
+        // 2. Remove event monitor
+        if let monitor = escMonitor {
+            NSEvent.removeMonitor(monitor)
+            escMonitor = nil
+        }
+
+        // 3. Detach callbacks immediately to prevent re-entry
+        let vm = sessionViewModel
         sessionViewModel = nil
+        vm?.onSessionComplete = nil
+        vm?.onPhaseChanged = nil
+        vm?.onEyesClosedChanged = nil
 
-        // Play completion sound
-        SoundService.shared.playCompletionSound()
+        // 4. Stop session (camera/eye detection)
+        vm?.stopSession()
 
-        // Reset timer for next reminder
+        // 4.5. 安全ネット: 音量が下がったまま残っていれば復帰
+        VolumeControlService.shared.emergencyRestore()
+
+        // 5. Timer reset (sound is handled by phase transitions)
         timerService?.reset()
+
+        // 6. Close window safely (EXC_BAD_ACCESS防止: 次RunLoopサイクルで破棄)
+        let window = sessionWindow
+        sessionWindow = nil
+        window?.safeClose()
     }
 
     // MARK: - Settings
 
     @objc private func openSettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        if let settingsWindow {
+            settingsWindow.makeKeyAndOrderFront(nil)
+        } else {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 350, height: 250),
+                styleMask: [.titled, .closable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "設定"
+            window.contentView = NSHostingView(rootView: SettingsView())
+            window.center()
+            window.isReleasedWhenClosed = false
+            window.makeKeyAndOrderFront(nil)
+            settingsWindow = window
+        }
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -128,17 +282,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showReminderNotification() {
         NotificationService.shared.showReminder { [weak self] in
-            self?.startSession()
+            DispatchQueue.main.async {
+                self?.startSession()
+            }
         }
     }
 
     // MARK: - Camera Permission
 
     private func requestCameraPermission() {
-        CameraService.shared.requestPermission { granted in
+        CameraService.shared.requestPermission { [weak self] granted in
             if !granted {
                 DispatchQueue.main.async {
-                    self.showCameraPermissionAlert()
+                    self?.showCameraPermissionAlert()
                 }
             }
         }
@@ -156,6 +312,49 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
                 NSWorkspace.shared.open(url)
             }
+        }
+    }
+
+    // MARK: - URL Scheme (blind://)
+
+    @MainActor
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            guard url.scheme == "blind" else { continue }
+            switch url.host {
+            case "start-session":
+                startSession()
+            case "settings":
+                openSettings()
+            default:
+                break
+            }
+        }
+    }
+
+    // MARK: - Safety: Emergency Cleanup
+
+    /// 音量復帰 + ウィンドウ非表示（applicationWillTerminate / シグナルから呼ぶ）
+    private func emergencyCleanup() {
+        VolumeControlService.shared.emergencyRestore()
+        sessionWindow?.orderOut(nil)
+        watchdog?.stop()
+    }
+
+    // MARK: - Safety: Signal Handlers (層5)
+
+    private func setupSignalHandlers() {
+        // SIGTERM: Force Quit (Cmd+Opt+Esc) で送られる
+        signal(SIGTERM) { _ in
+            VolumeControlService.shared.emergencyRestore()
+            _sharedAppDelegate?.sessionWindow?.orderOut(nil)
+            exit(0)
+        }
+        // SIGINT: Ctrl+C
+        signal(SIGINT) { _ in
+            VolumeControlService.shared.emergencyRestore()
+            _sharedAppDelegate?.sessionWindow?.orderOut(nil)
+            exit(0)
         }
     }
 
