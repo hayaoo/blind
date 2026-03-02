@@ -23,8 +23,8 @@ public class NotificationService: NSObject {
         onNotificationAction = onStart
 
         let content = UNMutableNotificationContent()
-        content.title = "Blind"
-        content.body = "目を閉じて、今を確認しましょう"
+        content.title = "目を休めよう"
+        content.body = "立ち止まって、今やっていることを確認しよう"
         content.sound = .default
         content.categoryIdentifier = "REMINDER"
 

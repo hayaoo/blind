@@ -49,6 +49,8 @@ class NotchOverlayWindow: NSWindow {
 
     var hasNotch: Bool { geometry?.hasNotch ?? false }
 
+    var displayMode: DisplayMode { geometry?.displayMode ?? .noNotch }
+
     // MARK: - Phase Frames
 
     /// 画面座標系でのフレームを返す（screenのoriginをオフセット）
@@ -80,30 +82,6 @@ class NotchOverlayWindow: NSWindow {
         }, completionHandler: completion)
     }
 
-    /// Phase 3: フルスクリーンへ拡大
-    func animateToFullscreen(duration: TimeInterval = 0.8, completion: (() -> Void)? = nil) {
-        guard let geo = geometry else { return }
-        let target = screenFrame(for: geo.fullscreenFrame)
-
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = duration
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            self.animator().setFrame(target, display: true)
-        }, completionHandler: completion)
-    }
-
-    /// Phase 4: フルスクリーンからencounterサイズへ縮小
-    func animateToShrink(duration: TimeInterval = 0.8, completion: (() -> Void)? = nil) {
-        guard let geo = geometry else { return }
-        let target = screenFrame(for: geo.encounterFrame)
-
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = duration
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            self.animator().setFrame(target, display: true)
-        }, completionHandler: completion)
-    }
-
     /// summonフレームへ縮小して消滅
     func animateToDisappear(duration: TimeInterval = 0.4, completion: (() -> Void)? = nil) {
         guard let geo = geometry else { return }
@@ -131,11 +109,4 @@ class NotchOverlayWindow: NSWindow {
     /// ESCキーをこのウィンドウレベルでも受け取れるようにする
     override var canBecomeKey: Bool { true }
 
-    /// ノッチなしの場合に角丸を適用
-    func applyRoundedCorners(radius: CGFloat = 16) {
-        guard let geo = geometry, !geo.hasNotch else { return }
-        contentView?.wantsLayer = true
-        contentView?.layer?.cornerRadius = radius
-        contentView?.layer?.masksToBounds = true
-    }
 }

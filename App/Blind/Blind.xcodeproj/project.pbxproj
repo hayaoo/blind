@@ -17,6 +17,7 @@
 		A10001010000000000000008 /* EyeCharacterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002010000000000000009 /* EyeCharacterView.swift */; };
 		A10001010000000000000009 /* NotchSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002010000000000000010 /* NotchSessionView.swift */; };
 		A10001010000000000000010 /* NotchOverlayWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002010000000000000011 /* NotchOverlayWindow.swift */; };
+		A10001010000000000000011 /* NotchShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002010000000000000012 /* NotchShape.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,6 +32,7 @@
 		A10002010000000000000009 /* EyeCharacterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EyeCharacterView.swift; sourceTree = "<group>"; };
 		A10002010000000000000010 /* NotchSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchSessionView.swift; sourceTree = "<group>"; };
 		A10002010000000000000011 /* NotchOverlayWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchOverlayWindow.swift; sourceTree = "<group>"; };
+		A10002010000000000000012 /* NotchShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchShape.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -83,6 +85,7 @@
 				A10002010000000000000004 /* SettingsView.swift */,
 				A10002010000000000000009 /* EyeCharacterView.swift */,
 				A10002010000000000000010 /* NotchSessionView.swift */,
+				A10002010000000000000012 /* NotchShape.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -189,6 +192,7 @@
 				A10001010000000000000008 /* EyeCharacterView.swift in Sources */,
 				A10001010000000000000009 /* NotchSessionView.swift in Sources */,
 				A10001010000000000000010 /* NotchOverlayWindow.swift in Sources */,
+				A10001010000000000000011 /* NotchShape.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

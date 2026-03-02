@@ -1,5 +1,12 @@
 import Foundation
 
+/// ディスプレイのノッチ形状モード
+public enum DisplayMode: Equatable, Sendable {
+    case notch      // MacBook Pro 2021+ (物理ノッチあり)
+    case noNotch    // iMac, 旧MacBook, 外部ディスプレイ
+    case island     // 将来のカメラアイランドMac
+}
+
 public struct NotchGeometry: Equatable, Sendable {
     public let screenWidth: CGFloat
     public let screenHeight: CGFloat
@@ -21,7 +28,16 @@ public struct NotchGeometry: Equatable, Sendable {
         self.auxiliaryTopRightWidth = auxiliaryTopRightWidth
     }
 
-    // MARK: - Notch Detection
+    // MARK: - Display Mode
+
+    public var displayMode: DisplayMode {
+        // TODO: island検知は将来のハードウェアで判定ロジックを追加
+        if safeAreaInsetsTop > 0 {
+            return .notch
+        } else {
+            return .noNotch
+        }
+    }
 
     public var hasNotch: Bool {
         safeAreaInsetsTop > 0
@@ -45,34 +61,68 @@ public struct NotchGeometry: Equatable, Sendable {
         )
     }
 
+    // MARK: - Layout Constants
+
+    /// テキスト帯の高さ
+    public static let textBarHeight: CGFloat = 54
+
+    /// ノッチ〜テキスト帯間のギャップ（透明）
+    public static let gapHeight: CGFloat = 12
+
+    /// ノッチ形状の下方拡張（目キャラ表示領域確保）
+    private static let notchPaddingV: CGFloat = 30
+
     // MARK: - Phase Frames
 
-    /// Phase 1: ノッチにぴったり収まる初期フレーム
-    /// ノッチなしの場合は画面上部中央に幅200x高さ32のピル
+    /// Phase 1: ノッチ形状のみ表示するフレーム
+    /// - `.notch`: 物理ノッチ幅に合わせ、下方30pt拡張（目キャラ表示用）
+    /// - `.noNotch`: 画面上部中央に280×70のフェイクノッチ
+    /// - `.island`: 360×70の横長ピル
     public var summonFrame: CGRect {
-        if hasNotch {
-            return notchRect
-        } else {
-            let pillWidth: CGFloat = 200
-            let pillHeight: CGFloat = 32
+        switch displayMode {
+        case .notch:
+            let padV = Self.notchPaddingV
             return CGRect(
-                x: (screenWidth - pillWidth) / 2,
-                y: screenHeight - pillHeight,
-                width: pillWidth,
-                height: pillHeight
+                x: notchRect.origin.x,
+                y: notchRect.origin.y - padV,
+                width: notchRect.width,
+                height: notchRect.height + padV
+            )
+        case .noNotch:
+            let w: CGFloat = 280
+            let h: CGFloat = 70
+            return CGRect(
+                x: (screenWidth - w) / 2,
+                y: screenHeight - h,
+                width: w,
+                height: h
+            )
+        case .island:
+            let w: CGFloat = 360
+            let h: CGFloat = 70
+            return CGRect(
+                x: (screenWidth - w) / 2,
+                y: screenHeight - h,
+                width: w,
+                height: h
             )
         }
     }
 
-    /// Phase 2: ノッチから下に200pt拡張
+    /// ウィンドウ内でのノッチシェイプの高さ
+    public var notchShapeHeight: CGFloat {
+        summonFrame.height
+    }
+
+    /// Phase 2: summonFrame + ギャップ(12pt) + テキスト帯(54pt)を下方に拡張
     public var encounterFrame: CGRect {
         let base = summonFrame
-        let extensionHeight: CGFloat = 200
+        let ext = Self.gapHeight + Self.textBarHeight
         return CGRect(
             x: base.origin.x,
-            y: base.origin.y - extensionHeight,
+            y: base.origin.y - ext,
             width: base.width,
-            height: base.height + extensionHeight
+            height: base.height + ext
         )
     }
 

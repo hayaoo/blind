@@ -3,167 +3,222 @@ import AppKit
 import BlindCore
 
 /// 4フェーズを統合したセッションView。
-/// NotchOverlayWindowのcontentViewとして使用される。
+/// ノッチ形状ゾーン + テキスト帯ゾーンに分離。
+/// 全画面暗転は別のバックドロップウィンドウが担当。
 struct NotchSessionView: View {
     @ObservedObject var viewModel: SessionViewModel
-    let hasNotch: Bool
+    let displayMode: DisplayMode
+    let notchZoneHeight: CGFloat
+    var onDismiss: (() -> Void)?
+
+    @State private var slideStartDate = Date()
 
     var body: some View {
         GeometryReader { geo in
-            ZStack {
-                // 黒背景（目を閉じている間はopacityで暗転を表現）
-                Color.black
-                    .opacity(backgroundOpacity)
-
-                // コンテンツ（フェーズに応じて切り替え）
-                phaseContent(size: geo.size)
-            }
+            notchLayout(size: geo.size)
         }
         .ignoresSafeArea()
     }
 
-    /// 暗転のopacity: 小窓時は1.0、フルスクリーン時はclosedProgressで0→1
-    private var backgroundOpacity: Double {
+    // MARK: - Text Bar Visibility
+
+    /// テキスト帯を表示するか
+    private var showsTextBar: Bool {
         switch viewModel.currentPhase {
-        case .encounter where viewModel.eyesClosed:
-            // 目を閉じ始め〜カウントダウン中: progressに応じて暗転
-            return 0.15 + 0.85 * viewModel.closedProgress
-        case .immersion, .awakening:
-            return 1.0
+        case .encounter, .immersion, .awakening:
+            return true
         default:
-            return 1.0
+            return false
         }
     }
 
-    @ViewBuilder
-    private func phaseContent(size: CGSize) -> some View {
-        switch viewModel.currentPhase {
-        case .idle:
-            EmptyView()
+    // MARK: - Notch Layout
 
-        case .summon:
-            // Phase 1: 目キャラがidle状態で出現
-            EyeCharacterView(
-                state: .idle,
-                size: fixedEyeSize
-            )
-
-        case .encounter:
-            // Phase 2: 目キャラ + メッセージ
-            encounterContent(size: size)
-
-        case .immersion:
-            // Phase 3: フルスクリーン黒 + 閉じた目
-            immersionContent(size: size)
-
-        case .awakening:
-            // Phase 4: ウインク + 覚醒メッセージ
-            awakeningContent(size: size)
-
-        case .completed, .cancelled:
-            EmptyView()
-        }
+    /// 目のスライド最大幅（ノッチ幅の端まで移動）
+    private func maxSlideDistance(containerWidth: CGFloat) -> CGFloat {
+        let eyeWidth = fixedEyeSize.width
+        return max(0, (containerWidth - eyeWidth) / 2 - 4)
     }
 
-    // MARK: - Phase 2: Encounter
-
     @ViewBuilder
-    private func encounterContent(size: CGSize) -> some View {
-        // 目を上部に固定（フルスクリーン拡大時も位置・サイズ不変）
-        VStack(spacing: 16) {
-            EyeCharacterView(
-                state: viewModel.eyeCharacterState,
-                size: fixedEyeSize
-            )
+    private func notchLayout(size: CGSize) -> some View {
+        VStack(spacing: NotchGeometry.gapHeight) {
+            // ゾーン1: ノッチ形状 + 目キャラ（固定高さ）
+            TimelineView(.animation) { timeline in
+                let time = timeline.date.timeIntervalSince(slideStartDate)
+                let slideX = computeSlideOffset(time: time, containerWidth: size.width)
+                let maxDist = maxSlideDistance(containerWidth: size.width)
+                let tilt: CGFloat = maxDist > 0 ? slideX / maxDist : 0
 
-            // メッセージ（常に表示）
-            Text(encounterMessage)
-                .font(.system(size: 16, weight: .medium, design: .rounded))
-                .foregroundColor(.white.opacity(0.9))
-                .multilineTextAlignment(.center)
+                ZStack {
+                    NotchShape(displayMode: displayMode)
+                        .fill(.black)
 
-            // カウントダウン進捗（目を閉じている間、常に表示）
-            if viewModel.eyesClosed {
-                ProgressView(value: viewModel.closedProgress)
-                    .progressViewStyle(LinearProgressViewStyle(tint: .white.opacity(0.6)))
-                    .frame(width: min(size.width * 0.5, 200))
+                    EyeCharacterView(
+                        state: eyeState,
+                        size: fixedEyeSize,
+                        tiltFactor: tilt
+                    )
+                    .offset(x: slideX)
+                }
             }
+            .frame(height: notchZoneHeight)
+            .clipShape(NotchShape(displayMode: displayMode))
 
-            // アクセシビリティ: 手動完了ボタン
-            if !viewModel.eyesClosed {
-                Button(action: {
-                    viewModel.manualComplete()
-                }) {
-                    Text("手動で完了")
-                        .font(.system(size: 11))
+            // ゾーン2: テキスト帯（角丸黒背景）
+            if showsTextBar {
+                textBar(width: size.width)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// テキスト帯: テキスト左寄せ + ×ボタン右端 + bottom borderプログレスバー
+    @ViewBuilder
+    private func textBar(width: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            Text(textMessage)
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundColor(.white.opacity(0.9))
+                .lineLimit(1)
+
+            Spacer()
+
+            if showsDismissButton {
+                Button(action: { onDismiss?() }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.white.opacity(0.4))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("セッションを手動で完了する")
+                .accessibilityLabel("セッションを閉じる")
             }
         }
-        .padding(.top, 20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .accessibilityElement(children: .contain)
-        .accessibilityAddTraits(.updatesFrequently)
+        .padding(.horizontal, 16)
+        .frame(height: NotchGeometry.textBarHeight)
+        .frame(maxWidth: .infinity)
+        .background(Color.black)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(alignment: .bottom) {
+            // プログレスバー: テキスト帯の下端をバーとして使用
+            if viewModel.eyesClosed {
+                GeometryReader { geo in
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color.white.opacity(0.5))
+                        .frame(
+                            width: geo.size.width * viewModel.closedProgress,
+                            height: 3
+                        )
+                }
+                .frame(height: 3)
+                .padding(.horizontal, 4)
+                .padding(.bottom, 4)
+            }
+        }
     }
 
-    private var encounterMessage: String {
-        if !viewModel.faceDetected {
-            return "ここだよ"
+    // MARK: - State
+
+    private var eyeState: EyeCharacterState {
+        switch viewModel.currentPhase {
+        case .summon:
+            return .idle
+        case .encounter:
+            return viewModel.eyeCharacterState
+        case .immersion:
+            return .closed
+        case .awakening:
+            return .closed
+        case .completed:
+            return .closed
+        default:
+            return .idle
         }
-        if viewModel.eyesClosed {
-            let remaining = max(0, viewModel.requiredClosedDuration - viewModel.closedDuration)
-            return "あと \(Int(ceil(remaining))) 秒..."
-        }
-        return "目を閉じて"
     }
 
-    // MARK: - Phase 3: Immersion（短い遷移フェーズ、すぐawakeningへ）
-
-    @ViewBuilder
-    private func immersionContent(size: CGSize) -> some View {
-        VStack(spacing: 20) {
-            EyeCharacterView(
-                state: .closed,
-                size: fixedEyeSize
-            )
-            Text("...")
-                .font(.system(size: 16, weight: .medium, design: .rounded))
-                .foregroundColor(.white.opacity(0.5))
+    private var textMessage: String {
+        switch viewModel.currentPhase {
+        case .encounter:
+            if !viewModel.faceDetected { return "ここだよ 👀" }
+            if viewModel.eyesClosed {
+                let remaining = max(0, viewModel.requiredClosedDuration - viewModel.closedDuration)
+                return "あと \(Int(ceil(remaining))) 秒..."
+            }
+            return "目を閉じて、今を確かめよう"
+        case .immersion:
+            return "..."
+        case .awakening:
+            return "おかえり"
+        default:
+            return ""
         }
-        .padding(.top, 20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    // MARK: - Phase 4: Awakening
-
-    @ViewBuilder
-    private func awakeningContent(size: CGSize) -> some View {
-        VStack(spacing: 20) {
-            EyeCharacterView(
-                state: .winking,
-                size: fixedEyeSize
-            )
-
-            Text("おかえり")
-                .font(.system(size: 18, weight: .medium, design: .rounded))
-                .foregroundColor(.white.opacity(0.9))
+    /// ×ボタン: 目を閉じていない & immersion/awakeningでない時に表示
+    private var showsDismissButton: Bool {
+        switch viewModel.currentPhase {
+        case .encounter where !viewModel.eyesClosed:
+            return true
+        default:
+            return false
         }
-        .padding(.top, 20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    // MARK: - Helpers
+    // MARK: - Slide Animation
 
-    /// 目キャラの固定サイズ（ウィンドウサイズに依存しない）
+    /// デフォルトの左寄せバイアス（-1..1の範囲、負=左）
+    private let defaultBias: CGFloat = -0.3
+
+    private func computeSlideOffset(time: Double, containerWidth: CGFloat) -> CGFloat {
+        let maxDist = maxSlideDistance(containerWidth: containerWidth)
+        guard maxDist > 0 else { return 0 }
+
+        switch viewModel.currentPhase {
+        case .summon:
+            return (defaultBias + CGFloat(sin(time * 0.3)) * 0.4) * maxDist
+        case .encounter:
+            if !viewModel.faceDetected {
+                return CGFloat(saccadeSlide(time: time)) * maxDist
+            }
+            return defaultBias * maxDist
+        default:
+            return defaultBias * maxDist
+        }
+    }
+
+    private func saccadeSlide(time: Double) -> Double {
+        let holdDuration = 1.6
+        let moveDuration = 0.2
+        let cycleDuration = holdDuration + moveDuration
+        let cycle = Int(time / cycleDuration)
+        let cycleTime = time - Double(cycle) * cycleDuration
+
+        func fixationPoint(_ index: Int) -> Double {
+            let hash = sin(Double(index) * 127.1 + 311.7)
+            return hash * 0.85
+        }
+
+        let from = fixationPoint(cycle)
+        let to = fixationPoint(cycle + 1)
+
+        if cycleTime < holdDuration {
+            return from
+        } else {
+            let t = (cycleTime - holdDuration) / moveDuration
+            let smooth = t * t * (3.0 - 2.0 * t)
+            return from + (to - from) * smooth
+        }
+    }
+
     private var fixedEyeSize: CGSize {
-        CGSize(width: 176, height: 106)
+        CGSize(width: 106, height: 64)
     }
 }
 
 #Preview("Encounter") {
     let vm = SessionViewModel()
-    NotchSessionView(viewModel: vm, hasNotch: true)
-        .frame(width: 400, height: 250)
+    NotchSessionView(viewModel: vm, displayMode: .notch, notchZoneHeight: 67)
+        .frame(width: 888, height: 133)
 }

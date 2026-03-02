@@ -8,6 +8,7 @@ private var _sharedAppDelegate: AppDelegate?
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var sessionWindow: NotchOverlayWindow?
+    private var backdropWindow: NSWindow?
     private var settingsWindow: NSWindow?
     private var timerService: TimerService?
     private var sessionViewModel: SessionViewModel?
@@ -106,9 +107,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let window = NotchOverlayWindow()
         window.configureGeometry()
 
-        let sessionView = NotchSessionView(viewModel: viewModel, hasNotch: window.hasNotch)
+        let notchHeight = window.currentGeometry?.notchShapeHeight ?? 67
+        var sessionView = NotchSessionView(
+            viewModel: viewModel,
+            displayMode: window.displayMode,
+            notchZoneHeight: notchHeight
+        )
+        sessionView.onDismiss = { [weak self] in
+            self?.closeSession(completed: false)
+        }
         window.contentView = NSHostingView(rootView: sessionView)
-        window.applyRoundedCorners()
 
         // Phase 1: summonフレームで表示開始
         window.applySummonFrame()
@@ -152,17 +160,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     private func handleEyesClosedChanged(_ closed: Bool) {
-        guard let window = sessionWindow else { return }
+        guard sessionWindow != nil else { return }
         if closed {
-            // 目を閉じた → フルスクリーン即座展開（opacity遷移で暗転）+ 音量フェードダウン
+            // 目を閉じた → バックドロップフェードイン + 音量フェードダウン
             VolumeControlService.shared.saveCurrentVolume()
-            window.animateToFullscreen(duration: 0.05)
+            showBackdrop(duration: 2.0)
             Task {
                 await VolumeControlService.shared.fadeDown(to: 0.02, duration: 2.0)
             }
         } else {
-            // 目を開いた → encounterサイズに戻す + 音量即時復帰
-            window.animateToEncounter(duration: 0.4)
+            // 目を開いた → バックドロップフェードアウト + 音量即時復帰
+            hideBackdrop(duration: 0.4)
             VolumeControlService.shared.emergencyRestore()
         }
     }
@@ -188,7 +196,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // 音量を即時復帰してから完了音を鳴らす
             VolumeControlService.shared.emergencyRestore()
             SoundService.shared.playCompletionSound()
-            window.animateToShrink(duration: 0.8)
+            hideBackdrop(duration: 0.8)
             // 覚醒アニメーション後に完了
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
                 self?.sessionViewModel?.onAwakeningAnimationComplete()
@@ -242,7 +250,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 5. Timer reset (sound is handled by phase transitions)
         timerService?.reset()
 
-        // 6. Close window safely (EXC_BAD_ACCESS防止: 次RunLoopサイクルで破棄)
+        // 6. Close backdrop
+        backdropWindow?.orderOut(nil)
+        backdropWindow = nil
+
+        // 7. Close window safely (EXC_BAD_ACCESS防止: 次RunLoopサイクルで破棄)
         let window = sessionWindow
         sessionWindow = nil
         window?.safeClose()
@@ -332,11 +344,59 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Backdrop Window（全画面黒フェード）
+
+    @MainActor
+    private func showBackdrop(duration: TimeInterval = 0.3) {
+        guard let screen = NSScreen.main, let sessionWin = sessionWindow else { return }
+
+        if backdropWindow == nil {
+            let w = NSWindow(
+                contentRect: screen.frame,
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            w.backgroundColor = .black
+            w.isOpaque = false
+            w.hasShadow = false
+            w.level = .screenSaver  // ノッチウィンドウと同レベル
+            w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+            w.ignoresMouseEvents = true
+            w.isReleasedWhenClosed = false
+            w.alphaValue = 0
+            backdropWindow = w
+        }
+
+        backdropWindow?.setFrame(screen.frame, display: true)
+        // ノッチウィンドウの真後ろに配置
+        backdropWindow?.order(.below, relativeTo: sessionWin.windowNumber)
+
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = duration
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            self.backdropWindow?.animator().alphaValue = 1
+        }
+    }
+
+    @MainActor
+    private func hideBackdrop(duration: TimeInterval = 0.3, completion: (() -> Void)? = nil) {
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = duration
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            self.backdropWindow?.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            self?.backdropWindow?.orderOut(nil)
+            completion?()
+        })
+    }
+
     // MARK: - Safety: Emergency Cleanup
 
     /// 音量復帰 + ウィンドウ非表示（applicationWillTerminate / シグナルから呼ぶ）
     private func emergencyCleanup() {
         VolumeControlService.shared.emergencyRestore()
+        backdropWindow?.orderOut(nil)
         sessionWindow?.orderOut(nil)
         watchdog?.stop()
     }
