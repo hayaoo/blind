@@ -33,6 +33,16 @@ struct SettingsView: View {
             }
 
             Section {
+                Button("チュートリアルを再表示") {
+                    UserDefaults.standard.set(false, forKey: "onboardingCompleted")
+                    // AppDelegateのstartOnboardingを呼ぶ
+                    if let delegate = NSApp.delegate as? AppDelegate {
+                        delegate.startOnboardingFromSettings()
+                    }
+                }
+            }
+
+            Section {
                 HStack {
                     Text("バージョン")
                     Spacer()

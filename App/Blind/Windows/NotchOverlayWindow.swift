@@ -28,9 +28,44 @@ class NotchOverlayWindow: NSWindow {
 
     // MARK: - Geometry
 
-    /// 現在のスクリーンからNotchGeometryを計算してキャッシュ
+    /// 現在のスクリーンからNotchGeometryを計算してキャッシュ。
+    /// デバッグ: `-debugDisplayMode notch|island` でモードを強制変更可能。
     func configureGeometry() {
         guard let screen = NSScreen.main else { return }
+        let frame = screen.frame
+
+        if let debugMode = UserDefaults.standard.string(forKey: "debugDisplayMode") {
+            // デバッグモード: MacBook Pro 14" のノッチ相当の値をシミュレート
+            switch debugMode {
+            case "notch":
+                let fakeNotchWidth: CGFloat = 340
+                let fakeSafeTop: CGFloat = 37
+                let auxWidth = (frame.width - fakeNotchWidth) / 2
+                geometry = NotchGeometry(
+                    screenWidth: frame.width,
+                    screenHeight: frame.height,
+                    safeAreaInsetsTop: fakeSafeTop,
+                    auxiliaryTopLeftWidth: auxWidth,
+                    auxiliaryTopRightWidth: auxWidth
+                )
+            case "island":
+                geometry = NotchGeometry(
+                    screenWidth: frame.width,
+                    screenHeight: frame.height,
+                    safeAreaInsetsTop: 0,
+                    auxiliaryTopLeftWidth: 0,
+                    auxiliaryTopRightWidth: 0,
+                    displayModeOverride: .island
+                )
+            default:
+                configureRealGeometry(screen: screen)
+            }
+        } else {
+            configureRealGeometry(screen: screen)
+        }
+    }
+
+    private func configureRealGeometry(screen: NSScreen) {
         let frame = screen.frame
         let safeTop = screen.safeAreaInsets.top
         let auxLeft = screen.auxiliaryTopLeftArea?.width ?? 0
@@ -74,6 +109,18 @@ class NotchOverlayWindow: NSWindow {
     func animateToEncounter(duration: TimeInterval = 0.6, completion: (() -> Void)? = nil) {
         guard let geo = geometry else { return }
         let target = screenFrame(for: geo.encounterFrame)
+
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = duration
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            self.animator().setFrame(target, display: true)
+        }, completionHandler: completion)
+    }
+
+    /// オンボーディング: 拡張テキスト帯付きフレームへアニメーション
+    func animateToOnboarding(duration: TimeInterval = 0.6, completion: (() -> Void)? = nil) {
+        guard let geo = geometry else { return }
+        let target = screenFrame(for: geo.onboardingFrame)
 
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = duration

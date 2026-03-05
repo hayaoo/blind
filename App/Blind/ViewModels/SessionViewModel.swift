@@ -19,8 +19,25 @@ class SessionViewModel: ObservableObject {
     var onEyesClosedChanged: ((Bool) -> Void)?
     var onSessionComplete: ((Bool) -> Void)?
 
+    // MARK: - Onboarding
+
+    /// オンボーディングモードかどうか
+    @Published var isOnboarding = false
+
+    /// 現在のオンボーディングフェーズ
+    @Published var currentOnboardingPhase: OnboardingPhase?
+
+    /// オンボーディング完了コールバック
+    var onOnboardingComplete: (() -> Void)?
+
+    /// オンボーディングフェーズ変更コールバック
+    var onOnboardingPhaseChanged: ((OnboardingPhase) -> Void)?
+
     var requiredClosedDuration: TimeInterval {
-        TimeInterval(UserDefaults.standard.integer(forKey: "eyeCloseDuration").nonZeroOr(5))
+        if isOnboarding {
+            return 2.0
+        }
+        return TimeInterval(UserDefaults.standard.integer(forKey: "eyeCloseDuration").nonZeroOr(5))
     }
 
     var closedProgress: Double {
@@ -74,6 +91,54 @@ class SessionViewModel: ObservableObject {
     func manualComplete() {
         guard currentPhase == .encounter else { return }
         advancePhase(trigger: .eyesClosedDurationMet)
+    }
+
+    // MARK: - Onboarding Methods
+
+    /// オンボーディング開始
+    func startOnboarding() {
+        isOnboarding = true
+        currentOnboardingPhase = .welcome
+        onOnboardingPhaseChanged?(.welcome)
+    }
+
+    /// オンボーディングの次のフェーズへ
+    func advanceOnboarding() {
+        guard let current = currentOnboardingPhase else { return }
+        switch current {
+        case .welcome:
+            currentOnboardingPhase = .camera
+            onOnboardingPhaseChanged?(.camera)
+        case .camera:
+            // カメラ許可後、お試しセッションへ
+            currentOnboardingPhase = .trySession
+            onOnboardingPhaseChanged?(.trySession)
+            startTrySession()
+        case .trySession:
+            currentOnboardingPhase = .done
+            onOnboardingPhaseChanged?(.done)
+        case .done:
+            completeOnboarding()
+        }
+    }
+
+    /// カメラ拒否時: trySessionをスキップしてdoneへ
+    func skipToOnboardingDone() {
+        currentOnboardingPhase = .done
+        onOnboardingPhaseChanged?(.done)
+    }
+
+    /// お試しセッション開始（短縮版）
+    private func startTrySession() {
+        // 通常セッションのencounterフェーズを開始するが、短縮版
+        startSession()
+    }
+
+    /// オンボーディング完了
+    private func completeOnboarding() {
+        isOnboarding = false
+        currentOnboardingPhase = nil
+        onOnboardingComplete?()
     }
 
     // MARK: - Phase Transitions

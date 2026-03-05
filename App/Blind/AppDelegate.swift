@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import SwiftUI
 import BlindCore
 
@@ -42,8 +43,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationService.shared.requestPermission()
 
         setupStatusItem()
-        setupTimer()
-        requestCameraPermission()
+
+        // 初回起動: オンボーディング → 完了後にタイマー開始
+        if !UserDefaults.standard.bool(forKey: "onboardingCompleted") {
+            // 少し遅延して起動（ウィンドウサーバー初期化待ち）
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.startOnboarding()
+            }
+        } else {
+            setupTimer()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -85,11 +94,161 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
     }
 
+    // MARK: - Onboarding
+
+    @MainActor
+    private func startOnboarding() {
+        guard sessionWindow == nil else { return }
+
+        let viewModel = SessionViewModel()
+        viewModel.onOnboardingComplete = { [weak self] in
+            UserDefaults.standard.set(true, forKey: "onboardingCompleted")
+            self?.closeSession(completed: true)
+            self?.setupTimer()
+        }
+        viewModel.onOnboardingPhaseChanged = { [weak self] phase in
+            self?.handleOnboardingPhaseChange(phase)
+        }
+        // trySession中のセッション遷移用
+        viewModel.onPhaseChanged = { [weak self] phase in
+            self?.handlePhaseChange(phase)
+        }
+        // trySessionではバックドロップ・音量制御なし
+        viewModel.onEyesClosedChanged = nil
+        sessionViewModel = viewModel
+
+        let window = NotchOverlayWindow()
+        window.configureGeometry()
+
+        let notchHeight = window.currentGeometry?.notchShapeHeight ?? 67
+        let bezelHeight = window.currentGeometry?.topHardwareHeight ?? 0
+        var sessionView = NotchSessionView(
+            viewModel: viewModel,
+            displayMode: window.displayMode,
+            notchZoneHeight: notchHeight,
+            bezelHeight: bezelHeight
+        )
+        sessionView.onDismiss = { [weak self] in
+            // ×ボタン: オンボーディングスキップ
+            UserDefaults.standard.set(true, forKey: "onboardingCompleted")
+            self?.closeSession(completed: false)
+            self?.setupTimer()
+        }
+        sessionView.onOnboardingAction = { [weak self] in
+            self?.handleOnboardingAction()
+        }
+        window.contentView = NSHostingView(rootView: sessionView)
+
+        window.applySummonFrame()
+        window.makeKeyAndOrderFront(nil)
+        sessionWindow = window
+
+        escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.keyCode == 53 {
+                UserDefaults.standard.set(true, forKey: "onboardingCompleted")
+                self?.closeSession(completed: false)
+                self?.setupTimer()
+                return nil
+            }
+            return event
+        }
+
+        // オンボーディング開始
+        viewModel.startOnboarding()
+
+        // summon→onboardingフレームへアニメーション
+        window.animateToOnboarding(duration: 0.6)
+    }
+
+    @MainActor
+    private func handleOnboardingAction() {
+        guard let vm = sessionViewModel else { return }
+        guard let phase = vm.currentOnboardingPhase else { return }
+
+        switch phase {
+        case .camera:
+            // カメラ権限を要求してから次のフェーズへ
+            let status = CameraService.shared.authorizationStatus
+            if status == .authorized {
+                vm.advanceOnboarding()
+            } else if status == .notDetermined {
+                CameraService.shared.requestPermission { [weak self] granted in
+                    DispatchQueue.main.async {
+                        if granted {
+                            self?.sessionViewModel?.advanceOnboarding()
+                        } else {
+                            // 拒否 → trySessionスキップしてdoneへ
+                            self?.sessionViewModel?.skipToOnboardingDone()
+                        }
+                    }
+                }
+            } else {
+                // denied/restricted → doneへスキップ
+                vm.skipToOnboardingDone()
+            }
+        default:
+            vm.advanceOnboarding()
+        }
+    }
+
+    @MainActor
+    private func handleOnboardingPhaseChange(_ phase: OnboardingPhase) {
+        guard let window = sessionWindow else { return }
+
+        switch phase {
+        case .welcome:
+            // 既にonboardingFrameで表示中
+            break
+
+        case .camera:
+            // カメラ権限要求はViewModelのadvanceOnboarding→ここでは
+            // OnboardingTextBarのボタンがadvanceOnboardingを呼ぶ。
+            // advanceOnboardingの中でrequestPermissionを呼ぶ必要がある。
+            // → ボタンのonActionをオーバーライドしてカメラ権限を処理
+            break
+
+        case .trySession:
+            // encounterフレームにアニメーション（通常セッションサイズ）
+            window.animateToEncounter(duration: 0.4) { [weak self] in
+                self?.sessionViewModel?.onSummonAnimationComplete()
+            }
+
+        case .done:
+            // onboardingフレームに戻す
+            window.animateToOnboarding(duration: 0.4)
+        }
+    }
+
+    /// 設定画面から呼ばれる: オンボーディング再表示
+    @MainActor
+    func startOnboardingFromSettings() {
+        settingsWindow?.close()
+        startOnboarding()
+    }
+
     // MARK: - Session
 
     @MainActor
     @objc func startSession() {
         guard sessionWindow == nil else { return }
+
+        // カメラ権限チェック: 未決定なら要求、拒否済みなら案内
+        let status = CameraService.shared.authorizationStatus
+        if status == .notDetermined {
+            CameraService.shared.requestPermission { [weak self] granted in
+                DispatchQueue.main.async {
+                    if granted {
+                        self?.startSession()
+                    } else {
+                        self?.showCameraPermissionAlert()
+                    }
+                }
+            }
+            return
+        } else if status == .denied || status == .restricted {
+            showCameraPermissionAlert()
+            return
+        }
 
         let viewModel = SessionViewModel()
         viewModel.onSessionComplete = { [weak self] completed in
@@ -108,10 +267,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.configureGeometry()
 
         let notchHeight = window.currentGeometry?.notchShapeHeight ?? 67
+        let bezelHeight = window.currentGeometry?.topHardwareHeight ?? 0
         var sessionView = NotchSessionView(
             viewModel: viewModel,
             displayMode: window.displayMode,
-            notchZoneHeight: notchHeight
+            notchZoneHeight: notchHeight,
+            bezelHeight: bezelHeight
         )
         sessionView.onDismiss = { [weak self] in
             self?.closeSession(completed: false)
@@ -183,9 +344,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         switch phase {
         case .summon:
-            // Summon → Encounter アニメーション
-            window.animateToEncounter(duration: 0.6) { [weak self] in
-                self?.sessionViewModel?.onSummonAnimationComplete()
+            if sessionViewModel?.isOnboarding == true {
+                // オンボーディングのtrySession: encounterへアニメーション
+                window.animateToEncounter(duration: 0.4) { [weak self] in
+                    self?.sessionViewModel?.onSummonAnimationComplete()
+                }
+            } else {
+                // 通常: Summon → Encounter アニメーション
+                window.animateToEncounter(duration: 0.6) { [weak self] in
+                    self?.sessionViewModel?.onSummonAnimationComplete()
+                }
             }
 
         case .immersion:
@@ -193,19 +361,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             break
 
         case .awakening:
-            // 音量を即時復帰してから完了音を鳴らす
-            VolumeControlService.shared.emergencyRestore()
-            SoundService.shared.playCompletionSound()
-            hideBackdrop(duration: 0.8)
-            // 覚醒アニメーション後に完了
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-                self?.sessionViewModel?.onAwakeningAnimationComplete()
+            if sessionViewModel?.isOnboarding == true {
+                // オンボーディング: 音量制御なし、短い待機で完了
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                    self?.sessionViewModel?.onAwakeningAnimationComplete()
+                }
+            } else {
+                // 通常: 音量を即時復帰してから完了音を鳴らす
+                VolumeControlService.shared.emergencyRestore()
+                SoundService.shared.playCompletionSound()
+                hideBackdrop(duration: 0.8)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                    self?.sessionViewModel?.onAwakeningAnimationComplete()
+                }
             }
 
         case .completed:
-            // ウィンドウを縮小して消す
-            window.animateToDisappear(duration: 0.4) { [weak self] in
-                self?.closeSession(completed: true)
+            if sessionViewModel?.isOnboarding == true {
+                // オンボーディングのtrySession完了 → doneフェーズへ
+                sessionViewModel?.advanceOnboarding()
+            } else {
+                // 通常: ウィンドウを縮小して消す
+                window.animateToDisappear(duration: 0.4) { [weak self] in
+                    self?.closeSession(completed: true)
+                }
             }
 
         case .cancelled:
@@ -240,6 +419,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         vm?.onSessionComplete = nil
         vm?.onPhaseChanged = nil
         vm?.onEyesClosedChanged = nil
+        vm?.onOnboardingComplete = nil
+        vm?.onOnboardingPhaseChanged = nil
 
         // 4. Stop session (camera/eye detection)
         vm?.stopSession()

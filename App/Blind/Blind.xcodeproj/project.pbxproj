@@ -18,6 +18,7 @@
 		A10001010000000000000009 /* NotchSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002010000000000000010 /* NotchSessionView.swift */; };
 		A10001010000000000000010 /* NotchOverlayWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002010000000000000011 /* NotchOverlayWindow.swift */; };
 		A10001010000000000000011 /* NotchShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002010000000000000012 /* NotchShape.swift */; };
+		A10001010000000000000012 /* OnboardingTextBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002010000000000000013 /* OnboardingTextBar.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,6 +34,7 @@
 		A10002010000000000000010 /* NotchSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchSessionView.swift; sourceTree = "<group>"; };
 		A10002010000000000000011 /* NotchOverlayWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchOverlayWindow.swift; sourceTree = "<group>"; };
 		A10002010000000000000012 /* NotchShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchShape.swift; sourceTree = "<group>"; };
+		A10002010000000000000013 /* OnboardingTextBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingTextBar.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -86,6 +88,7 @@
 				A10002010000000000000009 /* EyeCharacterView.swift */,
 				A10002010000000000000010 /* NotchSessionView.swift */,
 				A10002010000000000000012 /* NotchShape.swift */,
+				A10002010000000000000013 /* OnboardingTextBar.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -193,6 +196,7 @@
 				A10001010000000000000009 /* NotchSessionView.swift in Sources */,
 				A10001010000000000000010 /* NotchOverlayWindow.swift in Sources */,
 				A10001010000000000000011 /* NotchShape.swift in Sources */,
+				A10001010000000000000012 /* OnboardingTextBar.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

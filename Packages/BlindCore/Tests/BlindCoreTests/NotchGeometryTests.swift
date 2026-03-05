@@ -45,7 +45,6 @@ final class NotchGeometryTests: XCTestCase {
     }
 
     func testNotchWidth_imac() {
-        // 2560 - 0 - 0 = 2560
         XCTAssertEqual(Self.imac.notchWidth, 2560)
     }
 
@@ -57,42 +56,82 @@ final class NotchGeometryTests: XCTestCase {
 
     func testNotchRect_macbook() {
         let rect = Self.macbook.notchRect
-        // x = auxiliaryTopLeftWidth = 420
-        // y = screenHeight - safeAreaInsetsTop = 1117 - 37 = 1080
-        // width = 888, height = 37
         XCTAssertEqual(rect, CGRect(x: 420, y: 1080, width: 888, height: 37))
     }
 
-    // MARK: - summonFrame (legacy — 新仕様に置き換え済み)
+    // MARK: - displayMode
 
-    func testSummonFrame_withNotch() {
+    func testDisplayMode_notch() {
+        XCTAssertEqual(Self.macbook.displayMode, .notch)
+    }
+
+    func testDisplayMode_noNotch() {
+        XCTAssertEqual(Self.imac.displayMode, .noNotch)
+    }
+
+    // MARK: - summonFrame
+
+    func testSummonFrame_notch() {
         let frame = Self.macbook.summonFrame
-        // 新仕様: 物理ノッチ幅に一致、下方30pt拡張
-        XCTAssertEqual(frame, CGRect(x: 420, y: 1050, width: 888, height: 67))
+        let cr = NotchGeometry.concaveRadius
+        // 物理ノッチ下に配置: ノッチ幅+cr*2 パディング、上部にノッチ高さ分余白
+        XCTAssertEqual(frame.width, Self.macbook.notchWidth + cr * 2)
+        XCTAssertTrue(frame.height > Self.macbook.notchHeight)
+        // ウィンドウ上端 + ノッチ高さ = 物理ノッチの上端位置
+        XCTAssertEqual(frame.origin.y + frame.height, Self.macbook.screenHeight)
     }
 
-    func testSummonFrame_withoutNotch() {
+    func testSummonFrame_noNotch() {
         let frame = Self.imac.summonFrame
-        // 新仕様: 280×70のフェイクノッチ
-        XCTAssertEqual(frame, CGRect(x: 1140, y: 1370, width: 280, height: 70))
+        let cr = NotchGeometry.concaveRadius
+        // 280 + cr*2 のパディング付き、スクリーン上端に配置
+        XCTAssertEqual(frame.width, 280 + cr * 2)
+        XCTAssertEqual(frame.height, 70)
+        // 上端がスクリーン上端に一致
+        XCTAssertEqual(frame.origin.y + frame.height, Self.imac.screenHeight)
+        // 水平中央
+        XCTAssertEqual(frame.origin.x + frame.width / 2, Self.imac.screenWidth / 2)
     }
 
-    // MARK: - encounterFrame (legacy — 新仕様に置き換え済み)
-
-    func testEncounterFrame_withNotch() {
-        let frame = Self.macbook.encounterFrame
-        // summonFrame = (420, 1050, 888, 67)
-        // 下にgap(12) + textBar(54) = 66pt拡張
-        // y = 1050 - 66 = 984, height = 67 + 66 = 133
-        XCTAssertEqual(frame, CGRect(x: 420, y: 984, width: 888, height: 133))
+    func testSummonFrame_notch_horizontalCenter() {
+        let frame = Self.macbook.summonFrame
+        let notchCenter = Self.macbook.notchRect.origin.x + Self.macbook.notchRect.width / 2
+        let frameCenter = frame.origin.x + frame.width / 2
+        XCTAssertEqual(frameCenter, notchCenter, accuracy: 1)
     }
 
-    func testEncounterFrame_withoutNotch() {
-        let frame = Self.imac.encounterFrame
-        // summonFrame = (1140, 1370, 280, 70)
-        // 下にgap(12) + textBar(54) = 66pt拡張
-        // y = 1370 - 66 = 1304, height = 70 + 66 = 136
-        XCTAssertEqual(frame, CGRect(x: 1140, y: 1304, width: 280, height: 136))
+    // MARK: - encounterFrame
+
+    func testEncounterFrame_extendsSummonFrame() {
+        let ext = NotchGeometry.gapHeight + NotchGeometry.textBarHeight  // 12 + 54 = 66
+
+        for geo in [Self.macbook, Self.imac] {
+            let summon = geo.summonFrame
+            let encounter = geo.encounterFrame
+            XCTAssertEqual(encounter.origin.x, summon.origin.x)
+            XCTAssertEqual(encounter.origin.y, summon.origin.y - ext)
+            XCTAssertEqual(encounter.width, summon.width)
+            XCTAssertEqual(encounter.height, summon.height + ext)
+        }
+    }
+
+    // MARK: - onboardingFrame
+
+    func testOnboardingTextBarHeight() {
+        XCTAssertEqual(NotchGeometry.onboardingTextBarHeight, 120)
+    }
+
+    func testOnboardingFrame_extendsSummonFrame() {
+        let ext = NotchGeometry.gapHeight + NotchGeometry.onboardingTextBarHeight  // 12 + 80 = 92
+
+        for geo in [Self.macbook, Self.imac] {
+            let summon = geo.summonFrame
+            let onboarding = geo.onboardingFrame
+            XCTAssertEqual(onboarding.origin.x, summon.origin.x)
+            XCTAssertEqual(onboarding.origin.y, summon.origin.y - ext)
+            XCTAssertEqual(onboarding.width, summon.width)
+            XCTAssertEqual(onboarding.height, summon.height + ext)
+        }
     }
 
     // MARK: - fullscreenFrame
@@ -111,54 +150,6 @@ final class NotchGeometryTests: XCTestCase {
         )
     }
 
-    // MARK: - displayMode
-
-    func testDisplayMode_notch() {
-        XCTAssertEqual(Self.macbook.displayMode, .notch)
-    }
-
-    func testDisplayMode_noNotch() {
-        XCTAssertEqual(Self.imac.displayMode, .noNotch)
-    }
-
-    // MARK: - summonFrame (新: 拡張ノッチ)
-
-    func testSummonFrame_notch_extendsPhysicalNotch() {
-        let frame = Self.macbook.summonFrame
-        // notchRect = (420, 1080, 888, 37)
-        // 幅は物理ノッチに一致、下方30pt拡張
-        // x = 420, y = 1080 - 30 = 1050
-        // width = 888, height = 37 + 30 = 67
-        XCTAssertEqual(frame, CGRect(x: 420, y: 1050, width: 888, height: 67))
-    }
-
-    func testSummonFrame_noNotch_fakeNotch() {
-        let frame = Self.imac.summonFrame
-        // 画面上部中央に280×70
-        // x = (2560 - 280) / 2 = 1140
-        // y = 1440 - 70 = 1370
-        XCTAssertEqual(frame, CGRect(x: 1140, y: 1370, width: 280, height: 70))
-    }
-
-    // MARK: - encounterFrame (新: テキスト帯付き)
-
-    func testEncounterFrame_notch_includesTextBarAndGap() {
-        let frame = Self.macbook.encounterFrame
-        let summon = Self.macbook.summonFrame
-        let ext = NotchGeometry.gapHeight + NotchGeometry.textBarHeight  // 12 + 54 = 66
-        XCTAssertEqual(frame.origin.x, summon.origin.x)
-        XCTAssertEqual(frame.origin.y, summon.origin.y - ext)
-        XCTAssertEqual(frame.width, summon.width)
-        XCTAssertEqual(frame.height, summon.height + ext)
-    }
-
-    func testEncounterFrame_noNotch_includesTextBarAndGap() {
-        let frame = Self.imac.encounterFrame
-        let summon = Self.imac.summonFrame
-        let ext = NotchGeometry.gapHeight + NotchGeometry.textBarHeight
-        XCTAssertEqual(frame.height, summon.height + ext)
-    }
-
     // MARK: - notchShapeHeight
 
     func testNotchShapeHeight_matchesSummonHeight() {
@@ -169,11 +160,15 @@ final class NotchGeometryTests: XCTestCase {
     // MARK: - Layout Constants
 
     func testTextBarHeight() {
-        XCTAssertEqual(NotchGeometry.textBarHeight, 54)
+        XCTAssertEqual(NotchGeometry.textBarHeight, 36)
     }
 
     func testGapHeight() {
         XCTAssertEqual(NotchGeometry.gapHeight, 12)
+    }
+
+    func testConcaveRadius() {
+        XCTAssertEqual(NotchGeometry.concaveRadius, 10)
     }
 
     // MARK: - Equatable / Sendable
