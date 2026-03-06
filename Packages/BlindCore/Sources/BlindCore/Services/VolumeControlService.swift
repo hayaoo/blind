@@ -31,7 +31,10 @@ public final class VolumeControlService: VolumeControlling, @unchecked Sendable 
     // MARK: - Volume Get/Set
 
     public func getVolume() -> Float {
-        guard let deviceID = defaultOutputDeviceID() else { return 0.0 }
+        guard let deviceID = defaultOutputDeviceID() else {
+            print("[VolumeControl] getVolume: no output device found")
+            return 0.0
+        }
 
         var volume: Float32 = 0.0
         var size = UInt32(MemoryLayout<Float32>.size)
@@ -42,13 +45,19 @@ public final class VolumeControlService: VolumeControlling, @unchecked Sendable 
         )
 
         let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &volume)
-        guard status == noErr else { return 0.0 }
+        guard status == noErr else {
+            print("[VolumeControl] getVolume failed: OSStatus \(status)")
+            return 0.0
+        }
         return volume
     }
 
     public func setVolume(_ volume: Float) {
         let clamped = max(Self.minimumVolume, min(1.0, volume))
-        guard let deviceID = defaultOutputDeviceID() else { return }
+        guard let deviceID = defaultOutputDeviceID() else {
+            print("[VolumeControl] setVolume: no output device found")
+            return
+        }
 
         var value = clamped
         let size = UInt32(MemoryLayout<Float32>.size)
@@ -58,7 +67,10 @@ public final class VolumeControlService: VolumeControlling, @unchecked Sendable 
             mElement: kAudioObjectPropertyElementMain
         )
 
-        AudioObjectSetPropertyData(deviceID, &address, 0, nil, size, &value)
+        let status = AudioObjectSetPropertyData(deviceID, &address, 0, nil, size, &value)
+        if status != noErr {
+            print("[VolumeControl] setVolume(\(clamped)) failed: OSStatus \(status)")
+        }
     }
 
     // MARK: - Fade

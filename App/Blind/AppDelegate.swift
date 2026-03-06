@@ -16,6 +16,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var escMonitor: Any?
     private var watchdog: WatchdogService?
     private var sessionTimeoutTimer: Timer?
+    private var volumeFadeTask: Task<Void, Never>?
 
     /// セッションタイムアウト（秒）
     private let sessionMaxDuration: TimeInterval = 120
@@ -321,16 +322,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     private func handleEyesClosedChanged(_ closed: Bool) {
-        guard sessionWindow != nil else { return }
+        guard sessionWindow != nil else {
+            print("[Blind] handleEyesClosedChanged(\(closed)): sessionWindow is nil, skipping")
+            return
+        }
+        print("[Blind] handleEyesClosedChanged(\(closed))")
         if closed {
             // 目を閉じた → バックドロップフェードイン + 音量フェードダウン
+            let currentVol = VolumeControlService.shared.getVolume()
+            print("[Blind] Current volume before save: \(currentVol)")
             VolumeControlService.shared.saveCurrentVolume()
             showBackdrop(duration: 2.0)
-            Task {
+            volumeFadeTask?.cancel()
+            volumeFadeTask = Task {
                 await VolumeControlService.shared.fadeDown(to: 0.02, duration: 2.0)
             }
         } else {
             // 目を開いた → バックドロップフェードアウト + 音量即時復帰
+            volumeFadeTask?.cancel()
+            volumeFadeTask = nil
             hideBackdrop(duration: 0.4)
             VolumeControlService.shared.emergencyRestore()
         }
@@ -550,9 +560,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         backdropWindow?.setFrame(screen.frame, display: true)
-        // ノッチウィンドウの真後ろに配置
+        // 1. alpha=0のまま前面に出す（見えない）
+        backdropWindow?.orderFrontRegardless()
+        // 2. ノッチウィンドウの真後ろに移動
         backdropWindow?.order(.below, relativeTo: sessionWin.windowNumber)
-
+        // 3. フェードイン
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = duration
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
