@@ -117,10 +117,26 @@ class NotchOverlayWindow: NSWindow {
         }, completionHandler: completion)
     }
 
-    /// オンボーディング: 拡張テキスト帯付きフレームへアニメーション
+    /// オンボーディング: 拡張テキスト帯付きフレームへアニメーション（デフォルト高さ）
     func animateToOnboarding(duration: TimeInterval = 0.6, completion: (() -> Void)? = nil) {
         guard let geo = geometry else { return }
         let target = screenFrame(for: geo.onboardingFrame)
+
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = duration
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            self.animator().setFrame(target, display: true)
+        }, completionHandler: completion)
+    }
+
+    /// 拡張オンボーディング: コンテンツタイプに応じた動的高さでアニメーション
+    func animateToOnboarding(
+        contentHeight: NotchGeometry.OnboardingContentHeight,
+        duration: TimeInterval = 0.3,
+        completion: (() -> Void)? = nil
+    ) {
+        guard let geo = geometry else { return }
+        let target = screenFrame(for: geo.onboardingFrame(contentHeight: contentHeight))
 
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = duration

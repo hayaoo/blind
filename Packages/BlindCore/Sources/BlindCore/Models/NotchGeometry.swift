@@ -80,8 +80,26 @@ public struct NotchGeometry: Equatable, Sendable {
     /// テキスト帯の高さ
     public static let textBarHeight: CGFloat = 36
 
-    /// オンボーディング用拡張テキスト帯の高さ（コンテンツ + 上下余白）
+    /// オンボーディング用拡張テキスト帯のデフォルト高さ
     public static let onboardingTextBarHeight: CGFloat = 120
+
+    /// 拡張オンボーディングのコンテンツタイプ別テキスト帯高さ
+    public enum OnboardingContentHeight: CGFloat, Sendable {
+        /// ブリッジ画面（短いテキストのみ）
+        case bridge = 100
+        /// 情報画面（タイトル+サブテキスト+ボタン）
+        case info = 140
+        /// 情報画面（パーソナライズテキスト、やや長め）
+        case infoLarge = 180
+        /// 質問画面（4選択肢）
+        case question = 240
+        /// 質問画面（5選択肢、複数選択）
+        case questionLarge = 280
+        /// カード表示画面（4タイプ表示、プラン表示）
+        case cards = 260
+        /// ペイウォール画面（機能カード3つ+CTA）
+        case paywall = 320
+    }
 
     /// ノッチ〜テキスト帯間のギャップ（透明）
     public static let gapHeight: CGFloat = 12
@@ -150,6 +168,18 @@ public struct NotchGeometry: Equatable, Sendable {
     public var onboardingFrame: CGRect {
         let base = summonFrame
         let ext = Self.gapHeight + Self.onboardingTextBarHeight
+        return CGRect(
+            x: base.origin.x,
+            y: base.origin.y - ext,
+            width: base.width,
+            height: base.height + ext
+        )
+    }
+
+    /// 拡張オンボーディング: 動的高さのテキスト帯付きフレーム
+    public func onboardingFrame(contentHeight: OnboardingContentHeight) -> CGRect {
+        let base = summonFrame
+        let ext = Self.gapHeight + contentHeight.rawValue
         return CGRect(
             x: base.origin.x,
             y: base.origin.y - ext,

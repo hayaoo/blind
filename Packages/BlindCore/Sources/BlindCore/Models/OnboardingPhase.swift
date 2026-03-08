@@ -220,4 +220,55 @@ extension OnboardingPhase {
             return false
         }
     }
+
+    /// このフェーズに必要なテキスト帯の高さ
+    public var contentHeight: NotchGeometry.OnboardingContentHeight {
+        switch self {
+        // 導入
+        case .welcome, .promise: return .info
+        case .hook: return .infoLarge
+
+        // 診断ブリッジ
+        case .diagnosisBridgeAB, .diagnosisBridgeBC: return .bridge
+
+        // 診断質問
+        case .diagnosisA3: return .questionLarge // 複数選択（5つ）
+        case .diagnosisB1: return .questionLarge // 長い台詞の選択肢
+        case .diagnosisA1, .diagnosisA2, .diagnosisA4,
+             .diagnosisB2, .diagnosisB3, .diagnosisB4,
+             .diagnosisC1, .diagnosisC2, .diagnosisC3, .diagnosisC4:
+            return .question
+
+        // 知識教育
+        case .knowledgeElephant1, .knowledgeElephant2: return .infoLarge
+        case .knowledgeVoice1, .knowledgeVoice3: return .infoLarge
+        case .knowledgeVoice2: return .cards // 4タイプカード表示
+        case .knowledgeAwareness1, .knowledgeAwareness2: return .infoLarge
+        case .knowledgeFiveSeconds1: return .infoLarge
+        case .knowledgeFiveSeconds2: return .infoLarge
+
+        // 体験
+        case .camera: return .info
+        case .trySession: return .info // encounterフレームに切り替わる
+        case .trialReflection: return .info
+
+        // プラン提示
+        case .planLoading: return .info
+        case .planOverview: return .infoLarge
+        case .planVoiceType: return .info
+        case .planProPreview: return .info
+
+        // ペイウォール
+        case .softPaywall: return .paywall
+
+        // 完了
+        case .done: return .info
+
+        // Day 2-7
+        case .dailyTip: return .infoLarge
+        case .reportTrainingLog, .reportRunawayPattern, .reportGrowth: return .cards
+        case .hardPaywallValue: return .paywall
+        case .hardPaywallChoice: return .info
+        }
+    }
 }

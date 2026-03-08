@@ -223,16 +223,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.sessionViewModel?.onSummonAnimationComplete()
             }
 
-        case .done, .trialReflection, .planLoading, .planOverview,
-             .planVoiceType, .planProPreview, .softPaywall:
-            // trySession後はonboardingフレームに戻す
-            if window.currentGeometry != nil {
-                window.animateToOnboarding(duration: 0.4)
-            }
-
         default:
-            // その他のフェーズ（導入・診断・知識教育）は既にonboardingFrameで表示中
-            break
+            // コンテンツタイプに応じた動的高さでフレームをアニメーション
+            window.animateToOnboarding(
+                contentHeight: phase.contentHeight,
+                duration: 0.3
+            )
         }
     }
 
