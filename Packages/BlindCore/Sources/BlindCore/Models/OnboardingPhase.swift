@@ -85,12 +85,14 @@ public enum OnboardingPhase: Equatable, Sendable {
     /// #27: 気づきの確認
     case trialReflection
 
-    // MARK: - Day 1: パーソナライズプラン提示（4画面）
+    // MARK: - Day 1: パーソナライズプラン提示（5画面）
 
     /// #28: ローディング演出
     case planLoading
     /// #29: プラン概要（処方箋）
     case planOverview
+    /// #29.5: トレーニング時間帯選択（コミットメント）
+    case planSchedule
     /// #30: あなたの内なる声タイプ
     case planVoiceType
     /// #31: Pro予告（7日後のレポート）
@@ -150,7 +152,7 @@ extension OnboardingPhase {
             // 体験
             .camera, .trySession, .trialReflection,
             // プラン提示
-            .planLoading, .planOverview, .planVoiceType, .planProPreview,
+            .planLoading, .planOverview, .planSchedule, .planVoiceType, .planProPreview,
             // ペイウォール
             .softPaywall,
             // 完了
@@ -255,6 +257,7 @@ extension OnboardingPhase {
         // プラン提示
         case .planLoading: return .info
         case .planOverview: return .infoLarge
+        case .planSchedule: return .question // 4選択肢
         case .planVoiceType: return .info
         case .planProPreview: return .info
 

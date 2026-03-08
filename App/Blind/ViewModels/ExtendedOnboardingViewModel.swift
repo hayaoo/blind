@@ -218,6 +218,14 @@ class ExtendedOnboardingViewModel: ObservableObject {
         advance()
     }
 
+    /// トレーニング時間帯選択
+    func answerTrainingWindow(_ choice: TrainingWindowChoice) {
+        diagnosis.trainingWindow = choice
+        // 選択をすぐにUserDefaultsに反映
+        BlindSettings.saveTrainingSchedule(choice.schedule)
+        advance()
+    }
+
     /// Q27: 体験後の気づき確認
     func answerTrialReflection(_ answer: TrialReflectionAnswer) {
         diagnosis.trialReflection = answer
@@ -303,7 +311,7 @@ class ExtendedOnboardingViewModel: ObservableObject {
             break // SessionViewModelが管理
         case .planLoading:
             eyeCharacterState = .searching
-        case .planOverview, .planVoiceType, .planProPreview:
+        case .planOverview, .planSchedule, .planVoiceType, .planProPreview:
             eyeCharacterState = .tracking
         case .softPaywall:
             eyeCharacterState = .winking

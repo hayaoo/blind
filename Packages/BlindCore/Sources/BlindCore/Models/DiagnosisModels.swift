@@ -280,6 +280,9 @@ public struct DiagnosisResult: Codable, Sendable {
     // 体験後の確認
     public var trialReflection: TrialReflectionAnswer?        // Q27
 
+    // トレーニング時間帯
+    public var trainingWindow: TrainingWindowChoice?
+
     public init() {}
 
     /// 推奨リマインド間隔（分）
@@ -325,11 +328,14 @@ public struct PersonalizedPlan: Codable, Sendable {
     public let dailyGoal: Int
     /// 判定された内なる声タイプ
     public let innerVoiceType: InnerVoiceType?
+    /// トレーニング時間帯
+    public let trainingSchedule: TrainingSchedule
 
     public init(from diagnosis: DiagnosisResult) {
         self.reminderInterval = diagnosis.recommendedInterval
         self.eyeCloseDuration = diagnosis.recommendedEyeCloseDuration
         self.dailyGoal = diagnosis.recommendedDailyGoal
         self.innerVoiceType = diagnosis.innerVoiceType
+        self.trainingSchedule = diagnosis.trainingWindow?.schedule ?? .standard
     }
 }

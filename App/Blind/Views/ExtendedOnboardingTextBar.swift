@@ -275,6 +275,8 @@ struct ExtendedOnboardingTextBar: View {
             loadingContent
         case .planOverview:
             planContent
+        case .planSchedule:
+            scheduleSelectionContent
         case .planVoiceType:
             voiceTypeResultContent
         case .planProPreview:
@@ -505,6 +507,48 @@ struct ExtendedOnboardingTextBar: View {
                 .background(isUserType ? Color.white.opacity(0.15) : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
+        }
+    }
+
+    /// トレーニング時間帯選択（#29.5）
+    private var scheduleSelectionContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("いつトレーニングしますか？")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundColor(.white.opacity(0.85))
+
+            Text("この時間帯にリマインドを送ります")
+                .font(.system(size: 11, weight: .regular, design: .rounded))
+                .foregroundColor(.white.opacity(0.4))
+
+            ForEach(TrainingWindowChoice.allCases, id: \.rawValue) { choice in
+                Button(action: { viewModel.answerTrainingWindow(choice) }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: iconForSchedule(choice))
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.5))
+                            .frame(width: 16)
+                        Text(choice.displayText)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func iconForSchedule(_ choice: TrainingWindowChoice) -> String {
+        switch choice {
+        case .morning:  return "sunrise"
+        case .standard: return "sun.max"
+        case .late:     return "sun.haze"
+        case .fullDay:  return "clock"
         }
     }
 
@@ -804,8 +848,8 @@ struct ExtendedOnboardingTextBar: View {
         let phase = viewModel.currentPhase
         // 診断質問は選択肢タップで進むためボタン不要
         if phase.isDiagnosis && !phase.isBridge { return nil }
-        // ローディング中はボタン不要
-        if phase == .planLoading { return nil }
+        // ローディング中/時間帯選択は選択肢タップで進む
+        if phase == .planLoading || phase == .planSchedule { return nil }
 
         switch phase {
         case .welcome, .hook, .promise: return "次へ"

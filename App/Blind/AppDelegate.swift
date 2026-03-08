@@ -609,11 +609,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showReminderNotification() {
-        NotificationService.shared.showReminder { [weak self] in
-            DispatchQueue.main.async {
-                self?.startSession()
+        guard let timer = timerService else { return }
+
+        NotificationService.shared.showReminder(
+            escalation: timer.escalationLevel,
+            graceAvailable: timer.canUseGrace,
+            onStart: { [weak self] in
+                DispatchQueue.main.async {
+                    self?.startSession()
+                }
+            },
+            onGrace: { [weak self] in
+                // 猶予: 5分後に再通知
+                _ = self?.timerService?.useGrace()
             }
-        }
+        )
     }
 
     // MARK: - Camera Permission
