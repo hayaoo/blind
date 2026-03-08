@@ -53,6 +53,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } else {
             setupTimer()
+
+            // Day 7 レポート: インストールから7日経過 && 未表示
+            if OnboardingDataStore.shared.shouldShowDay7Report {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                    self?.startDay7Report()
+                }
+            }
         }
     }
 
@@ -232,6 +239,74 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Day 7 Report
+
+    @MainActor
+    private func startDay7Report() {
+        guard sessionWindow == nil else { return }
+
+        let viewModel = SessionViewModel()
+        viewModel.isOnboarding = true
+
+        let extVM = ExtendedOnboardingViewModel()
+        viewModel.extendedOnboardingVM = extVM
+
+        extVM.onPhaseChanged = { [weak self] phase in
+            viewModel.currentOnboardingPhase = phase
+            self?.handleOnboardingPhaseChange(phase)
+        }
+        extVM.onComplete = { [weak self] in
+            self?.closeSession(completed: true)
+        }
+        extVM.onSkip = { [weak self] in
+            OnboardingDataStore.shared.isDay7ReportShown = true
+            self?.closeSession(completed: false)
+        }
+
+        viewModel.onOnboardingComplete = { [weak self] in
+            self?.closeSession(completed: true)
+        }
+
+        sessionViewModel = viewModel
+
+        let window = NotchOverlayWindow()
+        window.configureGeometry()
+
+        let notchHeight = window.currentGeometry?.notchShapeHeight ?? 67
+        let bezelHeight = window.currentGeometry?.topHardwareHeight ?? 0
+        var sessionView = NotchSessionView(
+            viewModel: viewModel,
+            displayMode: window.displayMode,
+            notchZoneHeight: notchHeight,
+            bezelHeight: bezelHeight
+        )
+        sessionView.onDismiss = { [weak self] in
+            OnboardingDataStore.shared.isDay7ReportShown = true
+            self?.closeSession(completed: false)
+        }
+        window.contentView = NSHostingView(rootView: sessionView)
+
+        window.applySummonFrame()
+        window.makeKeyAndOrderFront(nil)
+        sessionWindow = window
+
+        escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.keyCode == 53 {
+                OnboardingDataStore.shared.isDay7ReportShown = true
+                self?.closeSession(completed: false)
+                return nil
+            }
+            return event
+        }
+
+        // Day 7フロー開始
+        extVM.startDay7Flow()
+        window.animateToOnboarding(
+            contentHeight: OnboardingPhase.reportTrainingLog.contentHeight,
+            duration: 0.6
+        )
+    }
+
     /// 設定画面から呼ばれる: オンボーディング再表示
     @MainActor
     func startOnboardingFromSettings() {
@@ -378,6 +453,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
+        case .preClose:
+            // Pro: encounterフレームを拡張して内なる声チェックを表示
+            window.animateToOnboarding(
+                contentHeight: .questionLarge,
+                duration: 0.3
+            )
+
+        case .encounter:
+            // preClose後の遷移: encounterサイズに縮小
+            if sessionViewModel?.isProEnabled == true {
+                window.animateToEncounter(duration: 0.3)
+            }
+
         case .immersion:
             // encounter中に既にフルスクリーン拡大済み。音量も下げ済み。
             break
@@ -398,11 +486,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
+        case .postClose:
+            // Pro: encounterフレームに拡張して象使いの判断ガイドを表示
+            window.animateToOnboarding(
+                contentHeight: .question,
+                duration: 0.3
+            )
+
         case .completed:
             if sessionViewModel?.isOnboarding == true {
                 // オンボーディングのtrySession完了 → doneフェーズへ
                 sessionViewModel?.advanceOnboarding()
             } else {
+                // セッションログ記録
+                logSessionCompletion()
                 // 通常: ウィンドウを縮小して消す
                 window.animateToDisappear(duration: 0.4) { [weak self] in
                     self?.closeSession(completed: true)
@@ -461,6 +558,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let window = sessionWindow
         sessionWindow = nil
         window?.safeClose()
+    }
+
+    // MARK: - Session Logging
+
+    @MainActor
+    private func logSessionCompletion() {
+        guard let vm = sessionViewModel, !vm.isOnboarding else { return }
+
+        let entry = SessionLogEntry(
+            skipped: false,
+            preCloseVoice: vm.preCloseVoice,
+            postCloseAction: vm.postCloseAction,
+            closedDuration: vm.closedDuration
+        )
+        OnboardingDataStore.shared.addSessionLog(entry)
+        OnboardingDataStore.shared.resetSkipCount()
     }
 
     // MARK: - Settings

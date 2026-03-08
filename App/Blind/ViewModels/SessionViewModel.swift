@@ -50,6 +50,37 @@ class SessionViewModel: ObservableObject {
     /// Phase 3 没入時間: カウントダウン完了後、覚醒に入るまでの短い間
     var immersionDuration: TimeInterval { 0.5 }
 
+    // MARK: - Pre-close / Post-close (Pro)
+
+    /// Pre-closeで選択された内なる声
+    @Published var preCloseVoice: InnerVoiceType?
+
+    /// Post-closeで選択された行動
+    @Published var postCloseAction: PostCloseAction?
+
+    /// Pro機能が有効か
+    var isProEnabled: Bool {
+        OnboardingDataStore.shared.isProUnlocked
+    }
+
+    /// Pre-close: 内なる声を選択して次へ
+    func selectPreCloseVoice(_ voice: InnerVoiceType) {
+        preCloseVoice = voice
+        advancePhase(trigger: .preCloseCompleted)
+    }
+
+    /// Post-close: 象使いの判断を選択して次へ
+    func selectPostCloseAction(_ action: PostCloseAction) {
+        postCloseAction = action
+        advancePhase(trigger: .postCloseCompleted)
+    }
+
+    /// Pre-close: 声なしでスキップ
+    func skipPreClose() {
+        preCloseVoice = nil
+        advancePhase(trigger: .preCloseCompleted)
+    }
+
     private var eyeDetectionService: EyeDetectionService?
     private var closedTimer: Timer?
     private var immersionTimer: Timer?
@@ -58,6 +89,8 @@ class SessionViewModel: ObservableObject {
     func startSession() {
         isActive = true
         closedDuration = 0
+        preCloseVoice = nil
+        postCloseAction = nil
 
         // Phase 1: Summon
         transitionTo(.summon)
@@ -188,7 +221,8 @@ class SessionViewModel: ObservableObject {
     }
 
     private func advancePhase(trigger: SessionPhaseTransition.Trigger) {
-        guard let next = SessionPhaseTransition.next(from: currentPhase, trigger: trigger) else { return }
+        let proActive = isProEnabled && !isOnboarding
+        guard let next = SessionPhaseTransition.next(from: currentPhase, trigger: trigger, proEnabled: proActive) else { return }
         transitionTo(next)
     }
 
@@ -224,6 +258,10 @@ class SessionViewModel: ObservableObject {
         switch currentPhase {
         case .idle, .summon:
             eyeCharacterState = .idle
+        case .preClose:
+            eyeCharacterState = .tracking
+        case .postClose:
+            eyeCharacterState = .winking
         case .encounter:
             if !faceDetected {
                 eyeCharacterState = .searching

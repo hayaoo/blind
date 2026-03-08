@@ -23,15 +23,23 @@ class ExtendedOnboardingViewModel: ObservableObject {
     /// ローディング中か
     @Published var isLoadingPlan = false
 
+    /// Day 7レポートコンテンツ（Day 7フロー時にセット）
+    @Published var reportContent: Day7ReportContent?
+
+    /// Day 7フローかどうか
+    @Published var isDay7Flow = false
+
     /// プログレス（0.0〜1.0）
     var progress: Double {
-        guard let index = currentPhase.day1Index else { return 0 }
-        return Double(index + 1) / Double(OnboardingPhase.day1ScreenCount)
+        let sequence = currentSequence
+        guard let index = sequence.firstIndex(of: currentPhase) else { return 0 }
+        return Double(index + 1) / Double(sequence.count)
     }
 
     /// 現在の画面番号（1-indexed）
     var currentScreenNumber: Int {
-        (currentPhase.day1Index ?? 0) + 1
+        let sequence = currentSequence
+        return (sequence.firstIndex(of: currentPhase) ?? 0) + 1
     }
 
     // MARK: - Callbacks
@@ -55,16 +63,36 @@ class ExtendedOnboardingViewModel: ObservableObject {
 
     private let dataStore = OnboardingDataStore.shared
 
+    /// 使用するシーケンス（Day 1 or Day 7）
+    private var currentSequence: [OnboardingPhase] {
+        isDay7Flow ? OnboardingPhase.day7Sequence : OnboardingPhase.day1Sequence
+    }
+
+    // MARK: - Day 7 Report
+
+    /// Day 7レポートフローを開始
+    func startDay7Flow() {
+        isDay7Flow = true
+        let stats = dataStore.computeWeeklyStats()
+        let diagnosis = dataStore.diagnosisResult
+        reportContent = Day7ReportContent(stats: stats, diagnosis: diagnosis)
+        transitionTo(.reportTrainingLog)
+    }
+
     // MARK: - Navigation
 
     /// 次のフェーズへ進む
     func advance() {
-        let sequence = OnboardingPhase.day1Sequence
+        let sequence = currentSequence
         guard let currentIndex = sequence.firstIndex(of: currentPhase) else { return }
         let nextIndex = currentIndex + 1
 
         guard nextIndex < sequence.count else {
-            complete()
+            if isDay7Flow {
+                completeDay7()
+            } else {
+                complete()
+            }
             return
         }
 
@@ -95,7 +123,7 @@ class ExtendedOnboardingViewModel: ObservableObject {
 
     /// 前のフェーズに戻る
     func goBack() {
-        let sequence = OnboardingPhase.day1Sequence
+        let sequence = currentSequence
         guard let currentIndex = sequence.firstIndex(of: currentPhase), currentIndex > 0 else { return }
         let prevPhase = sequence[currentIndex - 1]
         currentPhase = prevPhase
@@ -231,6 +259,13 @@ class ExtendedOnboardingViewModel: ObservableObject {
 
     // MARK: - Completion
 
+    /// Day 7レポート完了
+    private func completeDay7() {
+        dataStore.isDay7ReportShown = true
+        isDay7Flow = false
+        onComplete?()
+    }
+
     /// オンボーディング完了
     private func complete() {
         dataStore.isExtendedOnboardingCompleted = true
@@ -274,6 +309,13 @@ class ExtendedOnboardingViewModel: ObservableObject {
             eyeCharacterState = .winking
         case .done:
             eyeCharacterState = .winking
+        // Day 7
+        case .reportTrainingLog, .reportRunawayPattern, .reportGrowth:
+            eyeCharacterState = .tracking
+        case .hardPaywallValue:
+            eyeCharacterState = .winking
+        case .hardPaywallChoice:
+            eyeCharacterState = .idle
         default:
             eyeCharacterState = .idle
         }

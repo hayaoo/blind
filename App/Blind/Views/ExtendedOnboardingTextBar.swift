@@ -101,7 +101,8 @@ struct ExtendedOnboardingTextBar: View {
     // MARK: - Progress Bar
 
     private var showsProgressBar: Bool {
-        viewModel.currentPhase.isDiagnosis || viewModel.currentPhase.isKnowledge
+        let phase = viewModel.currentPhase
+        return phase.isDiagnosis || phase.isKnowledge || viewModel.isDay7Flow
     }
 
     private var progressBar: some View {
@@ -290,7 +291,19 @@ struct ExtendedOnboardingTextBar: View {
         case .done:
             doneContent
 
-        // Day 2-7（このバーでは表示しない）
+        // Day 7 レポート
+        case .reportTrainingLog:
+            reportTrainingLogContent
+        case .reportRunawayPattern:
+            reportRunawayPatternContent
+        case .reportGrowth:
+            reportGrowthContent
+        case .hardPaywallValue:
+            hardPaywallValueContent
+        case .hardPaywallChoice:
+            hardPaywallChoiceContent
+
+        // Day 2-6 tips等（このバーでは表示しない）
         default:
             EmptyView()
         }
@@ -617,6 +630,158 @@ struct ExtendedOnboardingTextBar: View {
         }
     }
 
+    // MARK: - Day 7 Report Views
+
+    /// トレーニング記録（#R1）
+    private var reportTrainingLogContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("7日間のトレーニング記録")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundColor(.white.opacity(0.85))
+
+            if let report = viewModel.reportContent {
+                reportRow(label: "セッション完了", value: "\(report.totalSessions - report.skippedSessions)回")
+                reportRow(label: "合計閉眼時間", value: formatDuration(report.totalClosedDuration))
+                reportRow(label: "スキップ率", value: "\(Int(report.skipRate * 100))%")
+            }
+        }
+    }
+
+    /// 暴走パターン（#R2: ヒートマップ）
+    private var reportRunawayPatternContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("あなたの暴走パターン")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundColor(.white.opacity(0.85))
+
+            if let report = viewModel.reportContent {
+                if let voice = report.dominantVoiceType {
+                    HStack(spacing: 6) {
+                        Text(voice.icon)
+                            .font(.system(size: 14))
+                        Text("最も多い内なる声: 「\(voice.displayName)」")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+
+                if let peak = report.peakSkipDayHour {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 12))
+                            .foregroundColor(.orange.opacity(0.8))
+                        Text("スキップが多い時間帯: \(Day7ReportContent.weekdayName(peak.weekday))曜日 \(peak.hour)時台")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+
+                Text("象が暴走しやすい時間帯に注意すると、トレーニング効果が上がります")
+                    .font(.system(size: 11, weight: .regular, design: .rounded))
+                    .foregroundColor(.white.opacity(0.4))
+            }
+        }
+    }
+
+    /// 気づきの成長（#R3）
+    private var reportGrowthContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("気づきの成長")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundColor(.white.opacity(0.85))
+
+            if let report = viewModel.reportContent {
+                reportRow(label: "軌道修正した回数", value: "\(report.courseCorrections)回")
+
+                if let level = report.initialSelfRegulation {
+                    Text("初日に「\(level.displayText)」と答えたあなたが、\(report.courseCorrections)回も軌道修正できました")
+                        .font(.system(size: 12, weight: .regular, design: .rounded))
+                        .foregroundColor(.white.opacity(0.5))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Text("気づきの筋肉は確実に育っています")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.7))
+            }
+        }
+    }
+
+    /// ハードペイウォール — Pro価値提案（#R4）
+    private var hardPaywallValueContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("もっと深いトレーニングへ")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundColor(.white.opacity(0.85))
+
+            if let report = viewModel.reportContent {
+                if report.skipRate > 0.3 {
+                    Text("スキップ率\(Int(report.skipRate * 100))%——暴走検知で象を捕まえませんか？")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+            }
+
+            proFeatureCard(icon: "🏋️", title: "トレーニングサイクル", desc: "閉眼前に内なる声チェック + 開眼後に象使いの判断ガイド")
+            proFeatureCard(icon: "📊", title: "週次レポート", desc: "暴走パターンの変化を毎週データで確認")
+            proFeatureCard(icon: "🚨", title: "暴走検知リマインド", desc: "スキップが続くと強めに介入して象を止める")
+        }
+    }
+
+    /// ハードペイウォール — 選択（#R5）
+    private var hardPaywallChoiceContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("選んでください")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundColor(.white.opacity(0.85))
+
+            // Pro CTA
+            Button(action: { /* TODO: Pro購入フロー */ }) {
+                Text("Proにアップグレード")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 36)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+
+            // 無料で続ける
+            Button(action: { viewModel.advance() }) {
+                Text("無料で続ける")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.4))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 28)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Report Helpers
+
+    private func reportRow(label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 12, weight: .regular, design: .rounded))
+                .foregroundColor(.white.opacity(0.5))
+            Spacer()
+            Text(value)
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundColor(.white.opacity(0.85))
+        }
+    }
+
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        let minutes = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        if minutes > 0 {
+            return "\(minutes)分\(secs)秒"
+        }
+        return "\(secs)秒"
+    }
+
     // MARK: - Text Content Helper
 
     private func textContent(main: String, sub: String) -> some View {
@@ -649,11 +814,20 @@ struct ExtendedOnboardingTextBar: View {
         case .trialReflection: return nil // 選択肢で進む
         case .softPaywall: return "まずは7日間、無料で体験"
         case .done: return "はじめる"
+        // Day 7
+        case .reportTrainingLog, .reportRunawayPattern, .reportGrowth: return "次へ"
+        case .hardPaywallValue: return "次へ"
+        case .hardPaywallChoice: return nil // ボタンはコンテンツ内
         default: return "次へ"
         }
     }
 
     private var showsBackButton: Bool {
+        if viewModel.isDay7Flow {
+            let sequence = OnboardingPhase.day7Sequence
+            guard let index = sequence.firstIndex(of: viewModel.currentPhase) else { return false }
+            return index > 0
+        }
         guard let index = viewModel.currentPhase.day1Index else { return false }
         return index > 0 && viewModel.currentPhase != .done
     }

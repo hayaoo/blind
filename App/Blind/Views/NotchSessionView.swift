@@ -41,7 +41,7 @@ struct NotchSessionView: View {
         }
         // オンボーディング中（trySession以外）は通常テキスト帯は非表示
         if viewModel.isOnboarding { return false }
-        // 通常セッション
+        // 通常セッション（preClose/postCloseは専用バーを使う）
         switch viewModel.currentPhase {
         case .encounter, .immersion, .awakening:
             return true
@@ -174,12 +174,108 @@ struct NotchSessionView: View {
                     .padding(.horizontal, cr)
                     .padding(.bottom, 4)
                 }
+            } else if showsProTrainingBar {
+                proTrainingBar
+                    .padding(.horizontal, cr)
+                    .padding(.bottom, 4)
             } else if showsTextBar {
                 textBar(width: size.width)
                     .padding(.horizontal, cr)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    // MARK: - Pro Training Bar (Pre-close / Post-close)
+
+    @ViewBuilder
+    private var proTrainingBar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if viewModel.currentPhase == .preClose {
+                preCloseContent
+            } else if viewModel.currentPhase == .postClose {
+                postCloseContent
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.black)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// Pre-close: 内なる声チェック
+    private var preCloseContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("今、どの声が聞こえていますか？")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundColor(.white.opacity(0.85))
+
+            ForEach(InnerVoiceType.allCases, id: \.rawValue) { voice in
+                Button(action: { viewModel.selectPreCloseVoice(voice) }) {
+                    HStack(spacing: 8) {
+                        Text(voice.icon)
+                            .font(.system(size: 12))
+                        Text("「\(voice.voiceQuote)」")
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+            }
+
+            // 「静か」オプション（声なしで先に進む）
+            Button(action: { viewModel.skipPreClose() }) {
+                Text("静か（声は聞こえない）")
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.4))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    /// Post-close: 象使いの判断ガイド
+    private var postCloseContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("象使いの判断")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundColor(.white.opacity(0.85))
+
+            Text("目を開けて——今から何をしますか？")
+                .font(.system(size: 12, weight: .regular, design: .rounded))
+                .foregroundColor(.white.opacity(0.5))
+
+            postCloseButton(.onTrack, label: "正しい方向に進んでいた。続ける", icon: "checkmark.circle")
+            postCloseButton(.courseCorrect, label: "方向転換する", icon: "arrow.triangle.turn.up.right.circle")
+            postCloseButton(.intentionalDetour, label: "意図的に別のことをしている", icon: "signpost.right")
+            postCloseButton(.stillNeeded, label: "まだ必要な作業だった", icon: "hourglass.circle")
+        }
+    }
+
+    private func postCloseButton(_ action: PostCloseAction, label: String, icon: String) -> some View {
+        Button(action: { viewModel.selectPostCloseAction(action) }) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(0.5))
+                Text(label)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.7))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
     }
 
     /// テキスト帯: テキスト左寄せ + ×ボタン右端
@@ -258,6 +354,17 @@ struct NotchSessionView: View {
             return "おかえり"
         default:
             return ""
+        }
+    }
+
+    /// Pre-close/Post-closeの拡張テキスト帯を表示するか
+    private var showsProTrainingBar: Bool {
+        guard !viewModel.isOnboarding else { return false }
+        switch viewModel.currentPhase {
+        case .preClose, .postClose:
+            return true
+        default:
+            return false
         }
     }
 
