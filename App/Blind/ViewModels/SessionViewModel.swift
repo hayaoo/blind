@@ -27,6 +27,9 @@ class SessionViewModel: ObservableObject {
     /// 現在のオンボーディングフェーズ
     @Published var currentOnboardingPhase: OnboardingPhase?
 
+    /// 拡張オンボーディングViewModel（33画面フロー管理）
+    var extendedOnboardingVM: ExtendedOnboardingViewModel?
+
     /// オンボーディング完了コールバック
     var onOnboardingComplete: (() -> Void)?
 
@@ -35,7 +38,7 @@ class SessionViewModel: ObservableObject {
 
     var requiredClosedDuration: TimeInterval {
         if isOnboarding {
-            return 2.0
+            return 3.0 // お試しセッション: 3秒
         }
         return TimeInterval(UserDefaults.standard.integer(forKey: "eyeCloseDuration").nonZeroOr(5))
     }
@@ -95,42 +98,72 @@ class SessionViewModel: ObservableObject {
 
     // MARK: - Onboarding Methods
 
-    /// オンボーディング開始
+    /// 拡張オンボーディング開始（33画面フロー）
     func startOnboarding() {
         isOnboarding = true
+        let vm = ExtendedOnboardingViewModel()
+        extendedOnboardingVM = vm
+
+        // フェーズ変更をSessionViewModelに伝播
+        vm.onPhaseChanged = { [weak self] phase in
+            self?.currentOnboardingPhase = phase
+            self?.onOnboardingPhaseChanged?(phase)
+        }
+
+        // お試しセッション開始
+        vm.onStartTrySession = { [weak self] in
+            self?.startTrySession()
+        }
+
+        // 完了
+        vm.onComplete = { [weak self] in
+            self?.completeOnboarding()
+        }
+
+        // 早期スキップ
+        vm.onSkip = { [weak self] in
+            self?.completeOnboarding()
+        }
+
         currentOnboardingPhase = .welcome
         onOnboardingPhaseChanged?(.welcome)
     }
 
-    /// オンボーディングの次のフェーズへ
+    /// オンボーディングの次のフェーズへ（拡張版: ExtendedOnboardingVMに委譲）
     func advanceOnboarding() {
-        guard let current = currentOnboardingPhase else { return }
-        switch current {
-        case .welcome:
-            currentOnboardingPhase = .camera
-            onOnboardingPhaseChanged?(.camera)
-        case .camera:
-            // カメラ許可後、お試しセッションへ
-            currentOnboardingPhase = .trySession
-            onOnboardingPhaseChanged?(.trySession)
-            startTrySession()
-        case .trySession:
+        guard let vm = extendedOnboardingVM else {
+            // フォールバック: 拡張VMがない場合はdoneへ
+            completeOnboarding()
+            return
+        }
+
+        // 特殊ケース: trySession完了後
+        if currentOnboardingPhase == .trySession {
+            vm.onTrySessionComplete()
+            return
+        }
+
+        // 特殊ケース: done → 完了
+        if currentOnboardingPhase == .done {
+            completeOnboarding()
+            return
+        }
+
+        vm.advance()
+    }
+
+    /// カメラ拒否時: trySessionをスキップしてプラン生成へ
+    func skipToOnboardingDone() {
+        if let vm = extendedOnboardingVM {
+            vm.transitionTo(.planLoading)
+        } else {
             currentOnboardingPhase = .done
             onOnboardingPhaseChanged?(.done)
-        case .done:
-            completeOnboarding()
         }
     }
 
-    /// カメラ拒否時: trySessionをスキップしてdoneへ
-    func skipToOnboardingDone() {
-        currentOnboardingPhase = .done
-        onOnboardingPhaseChanged?(.done)
-    }
-
-    /// お試しセッション開始（短縮版）
+    /// お試しセッション開始（短縮版: 3秒閉眼）
     private func startTrySession() {
-        // 通常セッションのencounterフェーズを開始するが、短縮版
         startSession()
     }
 
@@ -138,6 +171,7 @@ class SessionViewModel: ObservableObject {
     private func completeOnboarding() {
         isOnboarding = false
         currentOnboardingPhase = nil
+        extendedOnboardingVM = nil
         onOnboardingComplete?()
     }
 

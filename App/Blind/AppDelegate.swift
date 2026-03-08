@@ -156,6 +156,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // オンボーディング開始
         viewModel.startOnboarding()
+        setupExtendedOnboardingCallbacks(viewModel)
 
         // summon→onboardingフレームへアニメーション
         window.animateToOnboarding(duration: 0.6)
@@ -178,17 +179,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                         if granted {
                             self?.sessionViewModel?.advanceOnboarding()
                         } else {
-                            // 拒否 → trySessionスキップしてdoneへ
+                            // 拒否 → trySessionスキップしてプラン生成へ
                             self?.sessionViewModel?.skipToOnboardingDone()
                         }
                     }
                 }
             } else {
-                // denied/restricted → doneへスキップ
+                // denied/restricted → スキップ
                 vm.skipToOnboardingDone()
             }
         default:
             vm.advanceOnboarding()
+        }
+    }
+
+    /// 拡張オンボーディングVMにカメラ権限リクエストのハンドラを設定
+    @MainActor
+    private func setupExtendedOnboardingCallbacks(_ vm: SessionViewModel) {
+        vm.extendedOnboardingVM?.onRequestCameraPermission = { [weak self] completion in
+            let status = CameraService.shared.authorizationStatus
+            if status == .authorized {
+                completion(true)
+            } else if status == .notDetermined {
+                CameraService.shared.requestPermission { granted in
+                    DispatchQueue.main.async {
+                        completion(granted)
+                    }
+                }
+            } else {
+                completion(false)
+            }
         }
     }
 
@@ -197,26 +217,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let window = sessionWindow else { return }
 
         switch phase {
-        case .welcome:
-            // 既にonboardingFrameで表示中
-            break
-
-        case .camera:
-            // カメラ権限要求はViewModelのadvanceOnboarding→ここでは
-            // OnboardingTextBarのボタンがadvanceOnboardingを呼ぶ。
-            // advanceOnboardingの中でrequestPermissionを呼ぶ必要がある。
-            // → ボタンのonActionをオーバーライドしてカメラ権限を処理
-            break
-
         case .trySession:
             // encounterフレームにアニメーション（通常セッションサイズ）
             window.animateToEncounter(duration: 0.4) { [weak self] in
                 self?.sessionViewModel?.onSummonAnimationComplete()
             }
 
-        case .done:
-            // onboardingフレームに戻す
-            window.animateToOnboarding(duration: 0.4)
+        case .done, .trialReflection, .planLoading, .planOverview,
+             .planVoiceType, .planProPreview, .softPaywall:
+            // trySession後はonboardingフレームに戻す
+            if window.currentGeometry != nil {
+                window.animateToOnboarding(duration: 0.4)
+            }
+
+        default:
+            // その他のフェーズ（導入・診断・知識教育）は既にonboardingFrameで表示中
+            break
         }
     }
 

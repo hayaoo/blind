@@ -78,6 +78,7 @@ struct OnboardingTextBar: View {
         case .camera:     return "カメラを使います"
         case .done:       return "準備完了！"
         case .trySession: return ""
+        default:          return ""
         }
     }
 
@@ -87,6 +88,7 @@ struct OnboardingTextBar: View {
         case .camera:     return "目を閉じたことを感知するために使います。映像は保存・送信しません。"
         case .done:       return "30分ごとにお知らせします。設定はメニューバーからいつでも。"
         case .trySession: return ""
+        default:          return ""
         }
     }
 
@@ -96,6 +98,7 @@ struct OnboardingTextBar: View {
         case .camera:     return "カメラを許可する"
         case .done:       return "はじめる"
         case .trySession: return ""
+        default:          return "次へ"
         }
     }
 }

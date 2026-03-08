@@ -19,6 +19,8 @@
 		A10001010000000000000010 /* NotchOverlayWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002010000000000000011 /* NotchOverlayWindow.swift */; };
 		A10001010000000000000011 /* NotchShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002010000000000000012 /* NotchShape.swift */; };
 		A10001010000000000000012 /* OnboardingTextBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002010000000000000013 /* OnboardingTextBar.swift */; };
+		A10001010000000000000013 /* ExtendedOnboardingTextBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002010000000000000014 /* ExtendedOnboardingTextBar.swift */; };
+		A10001010000000000000014 /* ExtendedOnboardingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002010000000000000015 /* ExtendedOnboardingViewModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +37,8 @@
 		A10002010000000000000011 /* NotchOverlayWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchOverlayWindow.swift; sourceTree = "<group>"; };
 		A10002010000000000000012 /* NotchShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchShape.swift; sourceTree = "<group>"; };
 		A10002010000000000000013 /* OnboardingTextBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingTextBar.swift; sourceTree = "<group>"; };
+		A10002010000000000000014 /* ExtendedOnboardingTextBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtendedOnboardingTextBar.swift; sourceTree = "<group>"; };
+		A10002010000000000000015 /* ExtendedOnboardingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtendedOnboardingViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -89,6 +93,7 @@
 				A10002010000000000000010 /* NotchSessionView.swift */,
 				A10002010000000000000012 /* NotchShape.swift */,
 				A10002010000000000000013 /* OnboardingTextBar.swift */,
+				A10002010000000000000014 /* ExtendedOnboardingTextBar.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -97,6 +102,7 @@
 			isa = PBXGroup;
 			children = (
 				A10002010000000000000005 /* SessionViewModel.swift */,
+				A10002010000000000000015 /* ExtendedOnboardingViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -197,6 +203,8 @@
 				A10001010000000000000010 /* NotchOverlayWindow.swift in Sources */,
 				A10001010000000000000011 /* NotchShape.swift in Sources */,
 				A10001010000000000000012 /* OnboardingTextBar.swift in Sources */,
+				A10001010000000000000013 /* ExtendedOnboardingTextBar.swift in Sources */,
+				A10001010000000000000014 /* ExtendedOnboardingViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -158,13 +158,22 @@ struct NotchSessionView: View {
 
             // ゾーン2: テキスト帯 or オンボーディング拡張テキスト帯
             if showsOnboardingBar {
-                OnboardingTextBar(
-                    phase: viewModel.currentOnboardingPhase ?? .welcome,
-                    onAction: onOnboardingAction ?? { viewModel.advanceOnboarding() },
-                    onDismiss: onDismiss
-                )
-                .padding(.horizontal, cr)
-                .padding(.bottom, 4)
+                if let extVM = viewModel.extendedOnboardingVM {
+                    ExtendedOnboardingTextBar(
+                        viewModel: extVM,
+                        onDismiss: onDismiss
+                    )
+                    .padding(.horizontal, cr)
+                    .padding(.bottom, 4)
+                } else {
+                    OnboardingTextBar(
+                        phase: viewModel.currentOnboardingPhase ?? .welcome,
+                        onAction: onOnboardingAction ?? { viewModel.advanceOnboarding() },
+                        onDismiss: onDismiss
+                    )
+                    .padding(.horizontal, cr)
+                    .padding(.bottom, 4)
+                }
             } else if showsTextBar {
                 textBar(width: size.width)
                     .padding(.horizontal, cr)
@@ -211,6 +220,9 @@ struct NotchSessionView: View {
     private var eyeState: EyeCharacterState {
         // オンボーディング（trySession以外）: フェーズに応じた目キャラ状態
         if viewModel.isOnboarding, viewModel.currentOnboardingPhase != .trySession {
+            if let extVM = viewModel.extendedOnboardingVM {
+                return extVM.eyeCharacterState
+            }
             switch viewModel.currentOnboardingPhase {
             case .welcome: return .idle
             case .camera:  return .searching
