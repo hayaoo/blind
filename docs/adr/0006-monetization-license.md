@@ -13,7 +13,7 @@ Proposed
 ADR-0005（獲得戦略）から導出された課金要件:
 
 1. ライセンスキーによるPro機能アンロック（App Store不使用のため）
-2. 買い切り$14
+2. 買い切り$19
 3. 国際通貨対応（日本円含む）
 4. プライバシー重視ユーザーへの配慮（オフライン検証）
 5. 開発工数の最小化（一人開発）
@@ -99,7 +99,7 @@ ADR-0005（獲得戦略）から導出された課金要件:
 | 項目 | 値 |
 |------|-----|
 | Product Name | Blind Pro |
-| Price | $14 (one-time) |
+| Price | $19 (one-time) |
 | License Key | 有効化（自動生成） |
 | Activation Limit | 3（Mac 3台まで） |
 | Checkout URL | `https://blind.lemonsqueezy.com/checkout/buy/xxx` |
@@ -138,7 +138,7 @@ Day 7レポート → hardPaywallChoice画面
 
 ```
 LP → 「Download Free」→ GitHub Releases DMG
-LP → 「Buy Pro ($14)」→ LemonSqueezy Checkout
+LP → 「Buy Pro ($19)」→ LemonSqueezy Checkout
 ```
 
 ### 7. 価格の根拠（ADR-0005から）
@@ -148,12 +148,24 @@ LP → 「Buy Pro ($14)」→ LemonSqueezy Checkout
 | CleanShot X | $29 |
 | Session (Pomodoro) | $4.99 |
 | Be Focused Pro | $4.99 |
-| **Blind Pro** | **$14** |
+| **Blind Pro** | **$19** |
 
-$14の位置づけ:
+$19の位置づけ:
 - Pomodoro系($5)より高い → 「5秒タイマーではない、行動変容ツール」
+- Headspace/Calm($70/年)より圧倒的に安い → 「買い切りでマイクロマインドフルネス」
 - CleanShot($29)より安い → 「気軽に試せる」
-- ランチ1回分 → ADHD層の衝動購入の閾値内
+- コーヒー3杯分 → ADHD層の衝動購入の閾値内
+- サーバーコストゼロ → 永久ライセンスに矛盾がない
+
+### 8. 収益チャネルの多層化
+
+| チャネル | モデル | 予想単価 | 備考 |
+|---------|--------|---------|------|
+| **直販（LemonSqueezy）** | $19 買い切り | $17.55/件（手数料控除後） | 主収益。LP + アプリ内から |
+| **Setapp** | 月額レベニューシェア | $0.50-2.00/月/ユーザー | 副収益 + 発見性。利用時間ベース |
+
+Setapp版はPro機能を全開放（Setappユーザーは定額に含まれるため）。
+直販のライセンスキー検証とは別のパスで、Setapp SDKによるサブスクリプション検証を実装。
 
 ## Alternatives Considered
 
@@ -184,7 +196,7 @@ GitHub Releases配布のアプリでStoreKitは使えない。
 - 買い切りはユーザーの信頼を得やすい
 
 ### Negative
-- LemonSqueezy手数料: $14 × 5% + $0.50 = $1.20/件（純利益$12.80）
+- LemonSqueezy手数料: $19 × 5% + $0.50 = $1.45/件（純利益$17.55）
 - オフライン30日制限がパワーユーザーに不評の可能性
 - LemonSqueezyの障害時は購入不可（ただし既存ユーザーはオフラインフォールバックで影響なし）
 
